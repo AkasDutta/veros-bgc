@@ -99,8 +99,31 @@ VARIABLES = {
         write_to_restart=True,
         active=lambda settings:settings.enable_carbon
     ),
-    "atmospheric_co2":
-        
+    "atmospheric_co2": Variable(
+        "Atmospheric CO2 concentration",
+        T_HOR,
+        "ppmv",
+        "Atmospheric CO2 concentration",
+        active=lambda settings:settings.enable_carbon
+    ),
+    #Figure out the sign of this term
+    "cflux": Variable(
+        "DIC flux",
+        T_HOR,
+        "mmol/m^2/s",
+        "Flux of CO2 over the ocean-atmosphere boundary",
+        output=True,
+        active=lambda settings:settings.enable_carbon
+    ),
+    "wind_speed": Variable(
+        "Debugging wind speed",
+        T_HOR,
+        "m/s",
+        "Just used for debugging. Please ignore",
+        output=True,
+        active=lambda settings:settings.enable_carbon
+    ),
+    "hSWS":
     
 
 
@@ -108,17 +131,6 @@ MAIN_VARIABLES = OrderedDict([])
 
 CONDITIONAL_VARIABLES = OrderedDict([
     ('enable_carbon', OrderedDict([
-        ('atmospheric_co2', Variable(
-            'Atmospheric co2 concentration', T_HOR, 'ppmv',
-            'Atmospheric co2 concentration')),
-        ('cflux', Variable(
-            'DIC Flux', T_HOR, 'mmol/m^2/s',
-            'Flux of CO2 over the ocean-atmosphere bounday',
-            output=True)),
-        ('wind_speed', Variable(
-            'Debugging wind speed', T_HOR, 'm/s',
-            'Just used for debugging. Please ignore',
-            output=True)),
         ('hSWS', Variable('hSWS', T_HOR, '1',
                           '[H] in Sea water sample', output=True)),
         ('pCO2', Variable('pCO2', T_HOR, '?ppmv/atm?',
