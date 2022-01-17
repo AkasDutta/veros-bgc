@@ -1,65 +1,113 @@
-from collections import OrderedDict
+#Remove output=.. statements
+#Add time_dependent=false where relevant
 
 from veros.variables import Variable, T_GRID, T_HOR, YT, TIMESTEPS
+
+
+VARIABLES = {
+    #Variables which are part of the NPZD model
+    "bottom_mask": Variable(
+        "Bottom mask",
+        T_GRID, 
+        "",
+        "Bottom mask",
+        dtype="int8",
+        active=lambda settings:settings.enable_npzd
+    ),
+    "phytoplankton": Variable(
+        "Phytoplankton concentration",
+        T_GRID + TIMESTEPS,
+        "mmol/m^3?",
+        "Concentration of phytoplankton in grid box",
+         output=True,
+         write_to_restart=True,
+        active=lambda settings:settings.enable_npzd
+    ),
+    "zooplankton": Variable(
+        "Zooplankton concentration",
+        T_GRID + TIMESTEPS,
+        "mmol/m^3?",
+        "Concentration of zooplankton in grid box,"
+        output=True,
+        write_to_restart=True,
+        active=lambda settings:settings.enable_npzd
+    ),
+    "detritus": Variable(
+        "Detritus concentration",
+        T_GRID + TIMESTEPS,
+        "mmol/m^3?",
+        "Concentration of detritus in grid box",
+        output=True,
+        write_to_restart=True,
+        active=lambda settings:settings.enable_npzd
+    ),
+    "po4": Variable(
+        "Phosphate concentration",
+        T_GRID+TIMESTEPS,
+        output=True,
+        write_to_restart=True,
+        active=lambda settings:settings.enable_npzd
+    ),
+    "swr": Variable(
+        "Shortwave radiation",
+        T_HOR,
+        "W/m^3?",
+        "Incoming solar radiation at sea level",
+        active=lambda settings:settings.enable_npzd
+    ),
+    "rctheta": Variable(
+        "Effective vertical coordinate for incoming solar radiation",
+        YT,
+        "1",
+        "Effective vertical coordinate for incoming solar radiation",
+        active=lambda settings:settings.enable_npzd
+    ),
+    "dayfrac": Variable(
+        "Fraction of day with sunlight",
+        YT,
+        1
+        "Fraction of day with sunlight",
+        active=lambda settings:settings.enable_npzd
+    ),
+    #What follows is again defined on T_GRID and may be better suited above. Perhaps it needs to be evaluated last?
+    "excretion_total": Variable(
+        "Total excretion from zooplankton",
+        T_GRID,
+        "mmol/m^3/s",
+        "Zooplankton grazing causes excretion. This variable stores the total excreted amount for all consumed tracers.",
+        active=lambda settings:settings.enable_npzd
+    ),
+    
+    #Now we list variables for NPZD + Carbon cycle setups.
+    #BGC Functions involving the carbon cycle involve both sets of variables
+    
+    "dic": Variable(
+        "Dissolved Inorganic Carbon",
+        T_GRID + TIMESTEPS,
+        "mmol/m^3",
+        "Concentration of inorganic carbon ions and molecules",
+        output=True,
+        write_to_restart=True,
+        active=lambda settings:settings.enable_carbon
+    ),
+    "alkalinity": Variable(
+        "Alkalinity",
+        T_GRID + TIMESTEPS,
+        "mmol/m^3",
+        "Combined bases and acids",
+        output=True,
+        write_to_restart=True,
+        active=lambda settings:settings.enable_carbon
+    ),
+    "atmospheric_co2":
+        
+    
 
 
 MAIN_VARIABLES = OrderedDict([])
 
 CONDITIONAL_VARIABLES = OrderedDict([
-    ('enable_npzd', OrderedDict([
-        ('bottom_mask', Variable(
-            'Bottom mask', T_GRID, '', 'Bottom mask', dtype='int8'
-        )),
-        ('phytoplankton', Variable(
-            'Phytoplankton concentration', T_GRID + TIMESTEPS, 'mmol/m^3?',
-            'Concentration of phytoplankton in grid box',
-            output=True,
-            write_to_restart=True
-        )),
-        ('zooplankton', Variable(
-            'Zooplankton concentration', T_GRID + TIMESTEPS, 'mmol/m^3?',
-            'Concentration of zooplankton in grid box',
-            output=True,
-            write_to_restart=True
-        )),
-        ('detritus', Variable(
-            'Detritus concentration', T_GRID + TIMESTEPS, 'mmol/m^3?',
-            'Concentration of detritus in grid box',
-            output=True,
-            write_to_restart=True
-        )),
-        ('po4', Variable(
-            'Phosphate concentration', T_GRID + TIMESTEPS, 'mmol/m^3?',
-            'Concentration of phosphate in grid box',
-            output=True,
-            write_to_restart=True
-        )),
-        ('swr', Variable(
-            'Shortwave radiation', T_HOR, 'W/m^3?',
-            'Incomming solar radiation at sea level')),
-        ('rctheta', Variable(
-            'Effective vertical coordinate for incoming solar radiation', YT, '1',
-            'Effective vertical coordinate for incoming solar radiation')),
-        ('dayfrac', Variable(
-            'Fraction of day with sunlight', YT, '1',
-            'Fraction of day with sunlight')),
-        ('excretion_total', Variable(
-            'Total excretion from zooplankton', T_GRID, 'mmol/m^3 / s',
-            'Zooplankton grazing causes excretion. This stores the total excreted amount for all consumed tracers')),
-    ])),
     ('enable_carbon', OrderedDict([
-        ('dic', Variable(
-            'Dissolved Inorganic Carbon', T_GRID + TIMESTEPS, 'mmol/m^3',
-            'Concentration of inorganic carbon ions and molecule',
-            output=True,
-            write_to_restart=True,
-        )),
-        ('alkalinity', Variable(
-            'Alkalinity', T_GRID + TIMESTEPS, 'mmol/m^3',
-            'Combined bases and acids',
-            output=True,
-            write_to_restart=True
-        )),
         ('atmospheric_co2', Variable(
             'Atmospheric co2 concentration', T_HOR, 'ppmv',
             'Atmospheric co2 concentration')),
