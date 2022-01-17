@@ -123,25 +123,49 @@ VARIABLES = {
         output=True,
         active=lambda settings:settings.enable_carbon
     ),
-    "hSWS":
-    
-
-
-MAIN_VARIABLES = OrderedDict([])
-
-CONDITIONAL_VARIABLES = OrderedDict([
-    ('enable_carbon', OrderedDict([
-        ('hSWS', Variable('hSWS', T_HOR, '1',
-                          '[H] in Sea water sample', output=True)),
-        ('pCO2', Variable('pCO2', T_HOR, '?ppmv/atm?',
-                          'Partial CO2 pressure', output=True)),
-        ('dpCO2', Variable('dpCO2', T_HOR, '?ppmv/atm?',
-                           'Difference in ocean CO2 pressure and atmospheric', output=True)),
-        ('co2star', Variable('co2star', T_HOR, '?ppmv?',
-                             'Adjusted CO2 in ocean', output=True)),
-        ('dco2star', Variable('dco2star', T_HOR, '?ppmv?',
-                              'Adjusted CO2 difference', output=True)),
-        ('rcak', Variable('Calcite redistribution share', T_GRID, '1',
-                          'Calcite is redistributed after production by dissolution varying by depth')),
-    ])),
-])
+    "hSWS": Variable(
+        "hSWS",
+        T_HOR,
+        "[H] in sea water sample",
+        output=True,
+        active=lambda settings:settings.enable_carbon
+    ),
+    "pCO2": Variable(
+        "pCO2",
+        T_HOR,
+        "?ppmv/atm?",
+        "Partial CO2 pressure",
+        output=True,
+        active=lambda settings:settings.enable_carbon
+    ),
+    "dpCO2": Variable(
+        "dpCO2",
+        T_HOR,
+        "?ppmv/atm?",
+        "Difference in ocean CO2 pressure and atmospheric",
+        output=True,
+        active=lambda settings:settings.enable_carbon
+    ),
+    "co2star": Variable(
+        "co2star",
+        T_HOR,
+        "?ppmv?",
+        "Adjusted CO2 in ocean",
+        output=True,
+        active=lambda settings:settings.enable_carbon
+    ),
+    "dco2star": Variable(
+        "dco2star",
+        T_HOR,
+        "?ppmv?",
+        "Adjusted CO2 difference",
+        output=True,
+        active=lambda settings:settings.enable_carbon
+    ),
+    "rcak": Variable(
+        "Calcite redistribution share",
+        T_GRID,
+        "1",
+        "Calcite is redistributed after production by dissolution varying by depth",
+        active=lambda settings:settings.enable_carbon
+    )}
