@@ -1,13 +1,14 @@
 #!/usr/bin/env python
 
 import os
-
 import h5netcdf
 import ruamel.yaml as yaml
 
-from veros import VerosSetup, veros_method, distributed
-from veros.variables import Variable
 import veros.tools
+from veros import VerosSetup, veros_routine, veros_kernel, KernelOutput, logger
+from veros.variables import Variable
+from veros.core.operators import numpy as npx, update, 
+
 
 import veros_bgc
 
@@ -29,110 +30,113 @@ class GlobalFourDegreeBGC(VerosSetup):
     """
     __veros_plugins__ = (veros_bgc,)
 
-    @veros_method
-    def set_parameter(self, vs):
-        vs.identifier = '4deg'
+    @veros_routine
+    def set_parameter(self, state):
+        settings = state.settings
+        
+        settings.identifier = '4deg'
 
-        vs.nx, vs.ny, vs.nz = 90, 40, 15
-        vs.dt_mom = 1800.0
-        vs.dt_tracer = 86400.0
-        vs.dt_bio = vs.dt_tracer // 4
-        vs.runlen = 0.
+        settings.nx, settings.ny, settings.nz = 90, 40, 15
+        settings.dt_mom = 1800.0
+        settings.dt_tracer = 86400.0
+        settings.dt_bio = settings.dt_tracer // 4
+        settings.runlen = 0.
 
-        vs.trcmin = 0
-        vs.enable_npzd = True
-        vs.enable_carbon = True
+        settings.trcmin = 0
+        settings.enable_npzd = True
+        settings.enable_carbon = True
 
-        with open(os.path.join(BASE_PATH, 'npzd.yml')) as yaml_file:
-            cfg = yaml.safe_load(yaml_file)['npzd']
-            vs.npzd_selected_rules = cfg['selected_rules']
+        with open(os.path.join(BASE_PATH, "npzd.yml")) as yaml_file:
+            cfg = yaml.safe_load(yaml_file)["npzd"]
+            settings.npzd_selected_rules = cfg["selected_rules"]
 
-        vs.remineralization_rate_detritus = 0.09 / 86400
-        vs.bbio = 1.038
-        vs.cbio = 1.0
-        vs.maximum_growth_rate_phyto = 0.23 / 86400
-        vs.maximum_grazing_rate = 0.13 / 86400
-        vs.fast_recycling_rate_phytoplankton = 0.025 / 86400
-        vs.specific_mortality_phytoplankton = 0.035 / 86400
-        vs.quadric_mortality_zooplankton = 0.06 / 86400
-        vs.zooplankton_growth_efficiency = 0.60
-        vs.assimilation_efficiency = 0.5
-        vs.wd0 = 2 / 86400
-        vs.mwz = 1000
-        vs.mw = 0.02 / 86400
-        vs.dcaco3 = 2500
+        settings.remineralization_rate_detritus = 0.09 / 86400
+        settings.bbio = 1.038
+        settings.cbio = 1.0
+        settings.maximum_growth_rate_phyto = 0.23 / 86400
+        settings.maximum_grazing_rate = 0.13 / 86400
+        settings.fast_recycling_rate_phytoplankton = 0.025 / 86400
+        settings.specific_mortality_phytoplankton = 0.035 / 86400
+        settings.quadric_mortality_zooplankton = 0.06 / 86400
+        settings.zooplankton_growth_efficiency = 0.60
+        settings.assimilation_efficiency = 0.5
+        settings.wd0 = 2 / 86400
+        settings.mwz = 1000
+        settings.mw = 0.02 / 86400
+        settings.dcaco3 = 2500
 
-        vs.coord_degree = True
-        vs.enable_cyclic_x = True
+        settings.coord_degree = True
+        settings.enable_cyclic_x = True
 
-        vs.congr_epsilon = 1e-8
-        vs.congr_max_iterations = 20000
+        settings.congr_epsilon = 1e-8
+        settings.congr_max_iterations = 20000
 
-        vs.enable_neutral_diffusion = True
-        vs.K_iso_0 = 1000.0
-        vs.K_iso_steep = 500.0
-        vs.iso_dslope = 0.001
-        vs.iso_slopec = 0.001
-        vs.enable_skew_diffusion = True
+        settings.enable_neutral_diffusion = True
+        settings.K_iso_0 = 1000.0
+        settings.K_iso_steep = 500.0
+        settings.iso_dslope = 0.001
+        settings.iso_slopec = 0.001
+        settings.enable_skew_diffusion = True
 
-        vs.enable_hor_friction = True
-        vs.A_h = (4 * vs.degtom)**3 * 2e-11
-        vs.enable_hor_friction_cos_scaling = True
-        vs.hor_friction_cosPower = 1
+        settings.enable_hor_friction = True
+        settings.A_h = (4 * settings.degtom)**3 * 2e-11
+        settings.enable_hor_friction_cos_scaling = True
+        settings.hor_friction_cosPower = 1
 
-        vs.enable_implicit_vert_friction = True
-        vs.enable_tke = True
-        vs.c_k = 0.1
-        vs.c_eps = 0.7
-        vs.alpha_tke = 30.0
-        vs.mxl_min = 1e-8
-        vs.tke_mxl_choice = 2
-        vs.kappaM_min = 2e-4
-        vs.kappaH_min = 7e-5  # usually 2e-5
-        vs.enable_Prandtl_tke = False
-        vs.enable_kappaH_profile = True
+        settings.enable_implicit_vert_friction = True
+        settings.enable_tke = True
+        settings.c_k = 0.1
+        settings.c_eps = 0.7
+        settings.alpha_tke = 30.0
+        settings.mxl_min = 1e-8
+        settings.tke_mxl_choice = 2
+        settings.kappaM_min = 2e-4
+        settings.kappaH_min = 7e-5  # usually 2e-5
+        settings.enable_Prandtl_tke = False
+        settings.enable_kappaH_profile = True
 
         # eke
-        vs.K_gm_0 = 1000.0
-        vs.enable_eke = False
-        vs.eke_k_max = 1e4
-        vs.eke_c_k = 0.4
-        vs.eke_c_eps = 0.5
-        vs.eke_cross = 2.
-        vs.eke_crhin = 1.0
-        vs.eke_lmin = 100.0
-        vs.enable_eke_superbee_advection = False
-        vs.enable_eke_isopycnal_diffusion = False
+        settings.K_gm_0 = 1000.0
+        settings.enable_eke = False
+        settings.eke_k_max = 1e4
+        settings.eke_c_k = 0.4
+        settings.eke_c_eps = 0.5
+        settings.eke_cross = 2.
+        settings.eke_crhin = 1.0
+        settings.eke_lmin = 100.0
+        settings.enable_eke_superbee_advection = False
+        settings.enable_eke_isopycnal_diffusion = False
 
         # idemix
-        vs.enable_idemix = False
-        vs.enable_idemix_hor_diffusion = False
-        vs.enable_eke_diss_surfbot = False
-        vs.eke_diss_surfbot_frac = 0.2  #  fraction which goes into bottom
-        vs.enable_idemix_superbee_advection = False
+        settings.enable_idemix = False
+        settings.enable_idemix_hor_diffusion = False
+        settings.enable_eke_diss_surfbot = False
+        settings.eke_diss_surfbot_frac = 0.2  #  fraction which goes into bottom
+        settings.enable_idemix_superbee_advection = False
 
-        vs.eq_of_state_type = 5
+        settings.eq_of_state_type = 5
 
         # custom variables
-        vs.nmonths = 12
-        vs.variables.update(
-            sss_clim=Variable('sss_clim', ('xt', 'yt', 'nmonths'), '', '', time_dependent=False),
-            sst_clim=Variable('sst_clim', ('xt', 'yt', 'nmonths'), '', '', time_dependent=False),
-            qnec=Variable('qnec', ('xt', 'yt', 'nmonths'), '', '', time_dependent=False),
-            qnet=Variable('qnet', ('xt', 'yt', 'nmonths'), '', '', time_dependent=False),
-            taux=Variable('taux', ('xt', 'yt', 'nmonths'), '', '', time_dependent=False),
-            tauy=Variable('tauy', ('xt', 'yt', 'nmonths'), '', '', time_dependent=False),
+        state.dimensions["nmonths"] = 12
+        state.var_meta.update(
+            sss_clim=Variable("sss_clim", ("xt", "yt", "nmonths"), "", "", time_dependent=False),
+            sst_clim=Variable("sst_clim", ("xt", "yt", "nmonths"), "", "", time_dependent=False),
+            qnec=Variable("qnec", ("xt", "yt", "nmonths"), "", "", time_dependent=False),
+            qnet=Variable("qnet", ("xt", "yt", "nmonths"), "", "", time_dependent=False),
+            taux=Variable("taux", ("xt", "yt", "nmonths"), "", "", time_dependent=False),
+            tauy=Variable("tauy", ("xt", "yt", "nmonths"), "", "", time_dependent=False),
         )
 
-    @veros_method
-    def _read_forcing(self, vs, var):
-        with h5netcdf.File(DATA_FILES['forcing'], 'r') as infile:
+    @veros_routine
+    def _read_forcing(self, var):
+        with h5netcdf.File(DATA_FILES["forcing"], "r") as infile:
             var_obj = infile.variables[var]
-            return np.array(var_obj, dtype=str(var_obj.dtype)).T
+            return npx.array(var_obj).T
 
-    @veros_method
-    def set_grid(self, vs):
-        ddz = np.array([50., 70., 100., 140., 190., 240., 290., 340.,
+    @veros_routine
+    def set_grid(self, state):
+        vs = state.variables
+        ddz = npx.array([50., 70., 100., 140., 190., 240., 290., 340.,
                         390., 440., 490., 540., 590., 640., 690.])
         vs.dzt[:] = ddz[::-1]
         vs.dxt[:] = 4.0
