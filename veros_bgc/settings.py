@@ -1,10 +1,10 @@
 from veros.settings import Setting
 #Maybe add enable_carbon?
 
-enable_carbon
 
 SETTINGS = {
     'enable_npzd': Setting(False, bool, ''),
+    'enable_carbon': Setting(False, bool, ''),
 
     # I don't like keeping these in settings, but I can't make them in variables
     # maybe keep selected rules
