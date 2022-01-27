@@ -41,6 +41,9 @@ class GlobalFourDegreeBGC(VerosSetup):
         settings.dt_tracer = 86400.0
         settings.dt_bio = settings.dt_tracer // 4
         settings.runlen = 0.
+        
+        settings.x_origin = 4.0
+        settings.y_origin = -76.0
 
         settings.trcmin = 0
         settings.enable_npzd = True
@@ -68,9 +71,6 @@ class GlobalFourDegreeBGC(VerosSetup):
         settings.coord_degree = True
         settings.enable_cyclic_x = True
 
-        settings.congr_epsilon = 1e-8
-        settings.congr_max_iterations = 20000
-
         settings.enable_neutral_diffusion = True
         settings.K_iso_0 = 1000.0
         settings.K_iso_steep = 500.0
@@ -96,7 +96,7 @@ class GlobalFourDegreeBGC(VerosSetup):
         settings.enable_kappaH_profile = True
 
         # eke
-        settings.K_gm_0 = 1000.0
+        settings.K_gm_0 = 1000.0 #Hm
         settings.enable_eke = False
         settings.eke_k_max = 1e4
         settings.eke_c_k = 0.4
@@ -138,95 +138,137 @@ class GlobalFourDegreeBGC(VerosSetup):
         vs = state.variables
         ddz = npx.array([50., 70., 100., 140., 190., 240., 290., 340.,
                         390., 440., 490., 540., 590., 640., 690.])
-        vs.dzt[:] = ddz[::-1]
-        vs.dxt[:] = 4.0
-        vs.dyt[:] = 4.0
-        vs.y_origin = -78.0
-        vs.x_origin = 4.0
+        
+        vs.dzt = ddz[::-1]
+        vs.dxt = 4.0*npx.ones_like(vs.dxt)
+        vs.dyt = 4.0*npx.ones_like(vs.dyt)
 
-        idx_global, _ = distributed.get_chunk_slices(vs, ('xt', 'yt', 'zt'))
+        idx_global, _ = distributed.get_chunk_slices(vs, ('xt', 'yt', 'zt')) #hm
 
         with h5netcdf.File(DATA_FILES['corev2'], 'r') as infile:
-            vs.swr_initial = infile.variables['SWDN_MOD'][idx_global[::-1]].T
+            vs.swr_initial = infile.variables['SWDN_MOD'][idx_global[::-1]].T #Might move this down
 
-    @veros_method
-    def set_coriolis(self, vs):
-        vs.coriolis_t[...] = 2 * vs.omega * np.sin(vs.yt[np.newaxis, :] / 180. * vs.pi)
+    @veros_routine
+    def set_coriolis(self, state):
+        vs=state.variables
+        settings=state.settigs
+        vs.coriolis_t= update(
+          vs.coriolis_t, at[...], 2 * settings.omega * npx.sin(vs.yt[npx.newaxis, :] / 180. * settings.pi)
 
-    @veros_method(dist_safe=False, local_variables=[
-        'kbot'
-    ])
-    def set_topography(self, vs):
-        bathymetry_data = self._read_forcing(vs, 'bathymetry')
-        salt_data = self._read_forcing(vs, 'salinity')[:, :, ::-1]
-        mask_salt = salt_data == 0.
-        vs.kbot[2:-2, 2:-2] = 1 + np.sum(mask_salt.astype(np.int), axis=2)
-        mask_bathy = bathymetry_data == 0
-        vs.kbot[2:-2, 2:-2][mask_bathy] = 0
-        vs.kbot[vs.kbot == vs.nz] = 0
+    @veros_routine(dist_safe=False, local_variables=["kbot", "zt"])
+    def set_topography(self, state):
+        vs = state.variables
+        settings = state.settings
 
-    @veros_method(dist_safe=False, local_variables=[
-        'taux', 'tauy', 'qnec', 'qnet', 'sss_clim', 'sst_clim',
-        'temp', 'salt', 'taux', 'tauy', 'area_t', 'maskT',
-        'forc_iw_bottom', 'forc_iw_surface', 'zw', 'maskT',
-        'phytoplankton', 'zooplankton', 'detritus', 'po4',
-        'dic', 'atmospheric_co2', 'alkalinity', 'hSWS'
-    ])
-    def set_initial_conditions(self, vs):
+        bathymetry_data = self._read_forcing("bathymetry")
+        salt_data = self._read_forcing("salinity")[:, :, ::-1]
+        land_mask = (vs.zt[npx.newaxis, npx.newaxis, :] <= bathymetry_data[..., npx.newaxis]) | (salt_data == 0.0)
+
+        vs.kbot = update(vs.kbot, at[2:-2, 2:-2], 1 + npx.sum(land_mask.astype("int"), axis=2))
+
+        # set all-land cells
+        all_land_mask = (bathymetry_data == 0) | (vs.kbot[2:-2, 2:-2] == settings.nz)
+        vs.kbot = update(vs.kbot, at[2:-2, 2:-2], npx.where(all_land_mask, 0, vs.kbot[2:-2, 2:-2]))
+
+    @veros_routine(
+      dist_safe=False,
+      local_variables=[
+        "taux",
+        "tauy",
+        "qnec", 
+        "qnet",
+        "sss_clim",
+        "sst_clim",
+        "temp",
+        "salt",
+        "area_t",
+        "maskT",
+        "forc_iw_bottom",
+        "forc_iw_surface",
+        "zw",
+        "phytoplankton",
+        "zooplankton",
+        "detritus",
+        "po4",
+        "dic",
+        "atmospheric_co2",
+        "alkalinity",
+        "hSWS"
+      ],
+    )
+    def set_initial_conditions(self, state):
+        
+        vs = state.variables
+        settings = state.settings
+        
         # initial conditions for T and S
-        temp_data = self._read_forcing(vs, 'temperature')[:, :, ::-1]
-        vs.temp[2:-2, 2:-2, :, :2] = temp_data[:, :, :, np.newaxis] * \
-            vs.maskT[2:-2, 2:-2, :, np.newaxis]
-
-        salt_data = self._read_forcing(vs, 'salinity')[:, :, ::-1]
-        vs.salt[2:-2, 2:-2, :, :2] = salt_data[..., np.newaxis] * vs.maskT[2:-2, 2:-2, :, np.newaxis]
+        
+        temp_data = self._read_forcing('temperature')[:, :, ::-1]
+        vs.temp = update(
+            vs.temp, at[2:-2, 2:-2, :, :2], temp_data[:, :, :, npx.newaxis] * vs.maskT[2:-2, 2:-2, :, npx.newaxis]
+        )
+        
+        salt_data = self._read_forcing('salinity')[:, :, ::-1]
+        vs.salt = update(
+            vs.salt, at[2:-2, 2:-2, :, :2], salt_data[..., npx.newaxis] * vs.maskT[2:-2, 2:-2, :, npx.newaxis]
+        )
 
         # use Trenberth wind stress from MITgcm instead of ECMWF (also contained in ecmwf_4deg.cdf)
-        vs.taux[2:-2, 2:-2, :] = self._read_forcing(vs, 'tau_x')
-        vs.tauy[2:-2, 2:-2, :] = self._read_forcing(vs, 'tau_y')
+        vs.taux = update(vs.taux, at[2:-2, 2:-2, :], self._read_forcing("tau_x"))
+        vs.tauy = update(vs.tauy, at[2:-2, 2:-2, :], self._read_forcing("tau_y"))
 
         # heat flux
-        with h5netcdf.File(DATA_FILES['ecmwf'], 'r') as ecmwf_data:
-            qnec_var = ecmwf_data.variables['Q3']
-            vs.qnec[2:-2, 2:-2, :] = np.array(qnec_var, dtype=str(qnec_var.dtype)).transpose()
-            vs.qnec[vs.qnec <= -1e10] = 0.0
+        with h5netcdf.File(DATA_FILES["ecmwf"], "r") as ecmwf_data:
+            qnec_var = ecmwf_data.variables["Q3"]
+            vs.qnec = update(vs.qnec, at[2:-2, 2:-2, :], npx.array(qnec_var).T)
+            vs.qnec = npx.where(vs.qnec <= -1e10, 0.0, vs.qnec)
 
-        q = self._read_forcing(vs, 'q_net')
-        vs.qnet[2:-2, 2:-2, :] = -q
-        vs.qnet[vs.qnet <= -1e10] = 0.0
+        q = self._read_forcing("q_net")
+        vs.qnet = update(vs.qnet, at[2:-2, 2:-2, :], -q)
+        vs.qnet = npx.where(vs.qnet <= -1e10, 0.0, vs.qnet)
 
-        fxa = np.sum(vs.qnet[2:-2, 2:-2, :] * vs.area_t[2:-2, 2:-2, np.newaxis]) \
-              / 12 / np.sum(vs.area_t[2:-2, 2:-2])
-        print(' removing an annual mean heat flux imbalance of %e W/m^2' % fxa)
-        vs.qnet[...] = (vs.qnet - fxa) * vs.maskT[:, :, -1, np.newaxis]
+        mean_flux = (
+            npx.sum(vs.qnet[2:-2, 2:-2, :] * vs.area_t[2:-2, 2:-2, npx.newaxis]) / 12 / npx.sum(vs.area_t[2:-2, 2:-2])
+        )
+        logger.info(" removing an annual mean heat flux imbalance of %e W/m^2" % mean_flux)
+        vs.qnet = (vs.qnet - mean_flux) * vs.maskT[:, :, -1, npx.newaxis]
 
         # SST and SSS
-        vs.sst_clim[2:-2, 2:-2, :] = self._read_forcing(vs, 'sst')
-        vs.sss_clim[2:-2, 2:-2, :] = self._read_forcing(vs, 'sss')
+        vs.sst_clim = update(vs.sst_clim, at[2:-2,2:-2,:], self._read_forcing("sst"))
+        vs.sss_clim = update(vs.sss_clim, at[2:-2,2:-2,:], self._read_forcing("sss"))
 
-        if vs.enable_idemix:
-            vs.forc_iw_bottom[2:-2, 2:-2] = self._read_forcing(vs, 'tidal_energy') / vs.rho_0
-            vs.forc_iw_surface[2:-2, 2:-2] = self._read_forcing(vs, 'wind_energy') / vs.rho_0 * 0.2
 
-        if vs.enable_npzd:
-            phytoplankton = 0.14 * np.exp(vs.zw / 100) * vs.maskT
-            zooplankton = 0.014 * np.exp(vs.zw / 100) * vs.maskT
+        if settings.enable_idemix:
+            vs.forc_iw_bottom = update(vs.forc_iw_bottom, at[2:-2, 2:-2], 
+                                       self._read_forcing("tidal_energy")/settings.rho_0
+                                      )            
+            vs.forc_iw_surface = update(vs.forc_iw_surface, at[2:-2,2:-2],
+                                        self._read_forcing("wind_energy")/settings.rho_0*0.2
+                                       )
 
-            vs.phytoplankton[:, :, :, :] = phytoplankton[..., np.newaxis]
-            vs.zooplankton[:, :, :, :] = zooplankton[..., np.newaxis]
-            vs.detritus[:, :, :, :] = 1e-4 * vs.maskT[..., np.newaxis]
 
-            vs.po4[:, :, :, :] = 2.2
-            vs.po4[...] *= vs.maskT[..., np.newaxis]
+        if settings.enable_npzd:
+            phytoplankton = 0.14 * npx.exp(vs.zw / 100) * vs.maskT
+            zooplankton = 0.014 * npx.exp(vs.zw / 100) * vs.maskT
+            
+            vs.phytoplankton =  update(vs.phytoplankton, at[:, :, :, :], phytoplankton[..., npx.newaxis])
+            vs.zooplankton =  update(vs.zooplankton, at[:, :, :, :], zooplankton[..., npx.newaxis])
+            vs.detritus =  update(vs.detritus, at[:, :, :, :], 1e-4*vs.maskT[..., npx.newaxis])
 
-        if vs.enable_carbon:
-            vs.dic[...] = 2300 * vs.maskT[..., np.newaxis]
-            vs.atmospheric_co2[...] = 280
-            vs.alkalinity[...] = 2400 * vs.maskT[..., np.newaxis]
+            vs.po4 = update(vs.po4, at[:, :, :, :], 2.2)
+            vs.po4 = update_multiply(vs.po4, at[...], vs.maskT[..., npx.newaxis]
 
-            vs.hSWS[...] = 5e-7
+        if settings.enable_carbon:
+            vs.dic = update(vs.dic, at[...], 2300*vs.maskT[..., npx.newaxis])
+            vs.atmospheric_co2 = update(vs.atmospheric_co2, at[...], 280)
+            vs.alkalinity = update(vs.alkalinity, at[...], 2400*vsmaskT[..., npx.newaxis])
+            vs.hSWS = update(vs.hSWS, at[...], 5e-7)
 
-    @veros_method
+    @veros_routine
+    def set_forcing(self, state):
+        vs = state.variables
+        vs.update(set_forcing_kernel(state))
+                                     
     def set_forcing(self, vs):
         year_in_seconds = 360 * 86400.
         (n1, f1), (n2, f2) = veros.tools.get_periodic_interval(
