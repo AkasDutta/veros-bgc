@@ -268,7 +268,8 @@ class GlobalFourDegreeBGC(VerosSetup):
     def set_forcing(self, state):
         vs = state.variables
         vs.update(set_forcing_kernel(state))
-                                     @veros_kernel
+                                     
+    @veros_kernel
     def set_forcing_kernel(state):
         vs = state.variables
         settings = state.settings
@@ -325,39 +326,81 @@ class GlobalFourDegreeBGC(VerosSetup):
         )
 
 
-    @veros_method
-    def set_diagnostics(self, vs):
-        vs.diagnostics['snapshot'].output_frequency = 360 * 86400.
+    @veros_routine
+    def set_diagnostics(self, state):
+        vs = state.variables
+        settings = state.settings
+                                     
+        state.diagnostics["snapshot"].output_frequency = 360 * 86400.0
 
-        vs.diagnostics['overturning'].output_frequency = 360 * 86400.
-        vs.diagnostics['overturning'].sampling_frequency = vs.dt_tracer
+        state.diagnostics["overturning"].output_frequency = 360 * 86400.0
+        state.diagnostics["overturning"].sampling_frequency settings.dt_tracer
 
-        vs.diagnostics['energy'].output_frequency = 360 * 86400.
-        vs.diagnostics['energy'].sampling_frequency = 86400
+        state.diagnostics["energy"].output_frequency = 360 * 86400.
+        state.diagnostics["energy"].sampling_frequency = 86400
+        
+        snapshot_vars = [
+            "phytoplankton",
+            "zooplankton",
+            "detritus",
+            "po4",
+            "dic",
+            "alkalinity"
+            "cflux",
+            "windspeed",
+            "hSWS",
+            "pCO2",
+            "dpCO2",
+            "co2star",
+            "dco2star",
+        ]
+                                     
+        for var in snapshot_vars:
+            state.diagnostics["snapshot"].outpu_variables.append(var)
+                                     
 
         average_vars = [
-            'phytoplankton', 'po4', 'zooplankton', 'detritus', 'wind_speed', 'dic', 'alkalinity',
-            'temp', 'salt', 'u', 'v', 'surface_tauy', 'surface_taux', 'kappaH', 'psi', 'rho',
-            'pCO2', 'dpCO2', 'dco2star', 'cflux', 'atmospheric_co2'
+            "phytoplankton",
+            "po4",
+            "zooplankton",
+            "detritus',
+            "wind_speed',
+            "dic",
+            "alkalinity",
+            "temp",
+            "salt",
+            "u",
+            "v",
+            "surface_tauy",
+            "surface_taux",
+            "kappaH",
+            "psi",
+            "rho",
+            "pCO2",
+            "dpCO2",
+            "dco2star",
+            'cflux",
+            "atmospheric_co2"
         ]
-        vs.diagnostics['averages'].output_variables = average_vars
-        vs.diagnostics['averages'].output_frequency = 360 * 86400.
-        vs.diagnostics['averages'].sampling_frequency = 86400
+                                     
+        state.diagnostics["averages"].output_variables = average_vars
+        state.diagnostics["averages"].output_frequency = 360 * 86400.
+        state.diagnostics["averages"].sampling_frequency = 86400
 
-        vs.diagnostics['npzd'].output_frequency = 10 * 86400
-        vs.diagnostics['npzd'].save_graph = False
+        #state.diagnostics["npzd"].output_frequency = 10 * 86400
+        #state.diagnostics["npzd"].save_graph = False
 
-    @veros_method
-    def after_timestep(self, vs):
+    @veros_routine
+    def after_timestep(self, state):
         pass
 
 
-@veros.tools.cli
-def run(*args, **kwargs):
-    simulation = GlobalFourDegreeBGC(*args, **kwargs)
-    simulation.setup()
-    simulation.run()
+#@veros.tools.cli
+#def run(*args, **kwargs):
+#    simulation = GlobalFourDegreeBGC(*args, **kwargs)
+#    simulation.setup()
+#    simulation.run()
 
 
-if __name__ == '__main__':
-    run()
+#if __name__ == '__main__':
+#    run()
