@@ -395,12 +395,3 @@ class GlobalFourDegreeBGC(VerosSetup):
         pass
 
 
-#@veros.tools.cli
-#def run(*args, **kwargs):
-#    simulation = GlobalFourDegreeBGC(*args, **kwargs)
-#    simulation.setup()
-#    simulation.run()
-
-
-#if __name__ == '__main__':
-#    run()
