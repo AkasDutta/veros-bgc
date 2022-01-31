@@ -1,16 +1,17 @@
 """
 Classes for npzd tracers
 """
-import numpy as np
+import numpy as npx
 
-from veros import veros_method
+from veros import veros_routine
 
-class NPZD_tracer(np.ndarray):
+class NPZD_tracer():
     """ Class for npzd tracers to store additional information about themselves.
 
     Note
     ----
-    Inhenrits from numpy.ndarray to make it work seamless with array operations
+    Previously inhenrited from numpy.ndarray to make it work seamless with array operations
+    No longer possible to do so with the Jax backend.
 
     Parameters
     ----------
@@ -47,29 +48,31 @@ class NPZD_tracer(np.ndarray):
         If set: Factor for how much light is blocked
     """
 
-
-    def __new__(cls, input_array, name, sinking_speed=None, light_attenuation=None, transport=True,
-                description = None):
-        obj = np.asarray(input_array).view(cls)
+    def __init__(self, name, input_array, sinking_speed=None,
+                 light_attenuation=None, transport=True, description=None):
+        
+        self.name = name
+        self.data = input_array
+        
         if sinking_speed is not None:
-            obj.sinking_speed = sinking_speed
+           self.sinking_speed = sinking_speed
+        
         if light_attenuation is not None:
-            obj.light_attenuation = light_attenuation
+           self.light_attenuation = light_attenuation
+        
+        transport = self.transport
+        description = self.description
+        
 
-        obj.name = name
-        obj.transport = transport
-
-        return obj
-
-    def __array_finalize__(self, obj):
-        if obj is None:
-            return
+#    def __array_finalize__(self, obj):
+#        if obj is None:
+#            return
 
         # If we are slicing, obj will have __dir__ therefore we need to set attributes
         # on new sliced array
-        if hasattr(obj, "__dir__"):
-            for attribute in (set(dir(obj)) - set(dir(self))):
-                setattr(self, attribute, getattr(obj, attribute))
+#        if hasattr(obj, "__dir__"):
+#            for attribute in (set(dir(obj)) - set(dir(self))):
+#                setattr(self, attribute, getattr(obj, attribute))
 
 
 class Recyclable_tracer(NPZD_tracer):
@@ -98,19 +101,20 @@ class Recyclable_tracer(NPZD_tracer):
 
     + All attributes held by super class
     """
+    def __init__(self, name, input_array, recycling_rate=0, **kwargs):
+        self.recycling_rate = recycling_rate
+        super.__init__()
+        
 
-    def __new__(cls, input_array, name, recycling_rate=0, **kwargs):
-        obj = super().__new__(cls, input_array, name, **kwargs)
-        obj.recycling_rate = recycling_rate
-
-        return obj
-
-    @veros_method(inline=True)
-    def recycle(self, vs):
+    @veros_routine
+    def recycle(self, state):
         """
         Recycling is temperature dependant by :obj:`vs.bct`
         """
-        return vs.bct * self.recycling_rate * self
+        vs = state.variables
+        settings = self.settings
+        
+        return settings.bct * self.recycling_rate * self.data
 
 
 class Plankton(Recyclable_tracer):
