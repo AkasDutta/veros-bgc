@@ -737,7 +737,7 @@ def npzd(state):
     delta = allocate(state.dimensions, ("xt", "yt", "zt"), include_ghosts=False)
 
     ks = vs.kbot[2:-2, 2:-2] - 1
-    delta[:, :, :-1] = vs.dt_tracer / vs.dzw[npx.newaxis, npx.newaxis, :-1]\
+    delta[:, :, :-1] = settings.dt_tracer / vs.dzw[npx.newaxis, npx.newaxis, :-1]\
         * vs.kappaH[2:-2, 2:-2, :-1]
     delta[:, :, -1] = 0
     a_tri[:, :, 1:] = -delta[:, :, :-1] / vs.dzt[npx.newaxis, npx.newaxis, 1:]
@@ -769,17 +769,21 @@ def npzd(state):
         if settings.enable_hor_diffusion:
             horizontal_diffusion_change = npx.zeros_like(tracer_data[:, :, :, 0])
             horizontal_diffusion_change = diffusion.horizontal_diffusion(
-                                       state, tracer_data[:, :, :, vs.tau], diffusivity)
+                                       state, tracer_data[:, :, :, vs.tau], settings.K_h)
 
-            tracer_data[:, :, :, vs.taup1] = update_add(settings.dt_tracer * horizontal_diffusion_change, at[:,:,:, vs.taup1)
-                                                                                                             #Do this correctly.
+            tracer_data = update_add(tracer_data, at[:,:,:, vs.taup1],
+                                     settings.dt_tracer * horizontal_diffusion_change)
+            
 
-        if vs.enable_biharmonic_mixing:
-            biharmonic_diffusion_change = np.empty_like(tracer_data[:, :, :, 0])
-            diffusion.biharmonic(vs, tracer_data[:, :, :, vs.tau],
-                                 np.sqrt(abs(vs.K_hbi)), biharmonic_diffusion_change)
-
-            tracer_data[:, :, :, vs.taup1] += vs.dt_tracer * biharmonic_diffusion_change
+        if settings.enable_biharmonic_mixing:
+            biharmonic_diffusion_change = npx.empty_like(tracer_data[:, :, :, 0])
+            biharmonic_diffusion_change = diffusion.biharmonic_diffusion(
+                                          state, tracer_data[:, :, :, vs.tau],
+                                          npx.sqrt(abs(settings.K_hbi))
+                                          )
+            
+            tracer_data = update_add(tracer_data, at[:, :, :, vs.taup1],
+                                    settings.dt_tracer*biharmonic_diffusion_change)
 
         """
         Restoring zones
@@ -789,16 +793,17 @@ def npzd(state):
         """
         Isopycnal diffusion
         """
-        if vs.enable_neutral_diffusion:
-            dtracer_iso = np.zeros_like(tracer_data[..., 0])
+        if settings.enable_neutral_diffusion:
+            dtracer_iso = npx.zeros_like(tracer_data[..., 0])
 
-            isoneutral.isoneutral_diffusion_tracer(vs, tracer_data, dtracer_iso,
+            isoneutral.isoneutral_diffusion_tracer(state, tracer_data, dtracer_iso,
                                                    iso=True, skew=False)
 
-            if vs.enable_skew_diffusion:
+            if settings.enable_skew_diffusion:
                 dtracer_skew = np.zeros_like(tracer_data[..., 0])
                 isoneutral.isoneutral_diffusion_tracer(vs, tracer_data, dtracer_skew,
                                                        iso=False, skew=True)
+               #Ask Dion about how to redo this
         """
         Vertical mixing of tracers
         """
@@ -811,8 +816,8 @@ def npzd(state):
                                                                tracer_data[2:-2, 2:-2, :, vs.taup1])
 
     # update by biogeochemical changes
-    for tracer, change in npzd_changes.items():
-        vs.npzd_tracers[tracer][:, :, :, vs.taup1] += change
+    #for tracer, change in npzd_changes.items():
+    #    vs.npzd_tracers[tracer][:, :, :, vs.taup1] += change
 
     # prepare next timestep with minimum tracer values
     for tracer in vs.npzd_tracers.values():
