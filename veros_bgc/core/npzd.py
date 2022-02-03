@@ -6,7 +6,8 @@ from collections import namedtuple
 
 from veros import veros_method
 from veros import time
-from veros.core import diffusion, thermodynamics, utilities, isoneutral
+from veros.core import diffusion, thermodynamics, utilities
+from veros.core import isoneutral
 from veros.variables import allocate
 
 
@@ -796,14 +797,16 @@ def npzd(state):
         if settings.enable_neutral_diffusion:
             dtracer_iso = npx.zeros_like(tracer_data[..., 0])
 
-            isoneutral.isoneutral_diffusion_tracer(state, tracer_data, dtracer_iso,
-                                                   iso=True, skew=False)
+            tracer_data = isoneutral.diffusion.isoneutral_diffusion_tracer(
+                          state, tracer_data, dtracer_iso, iso=True, skew=False
+                           )
 
             if settings.enable_skew_diffusion:
-                dtracer_skew = np.zeros_like(tracer_data[..., 0])
-                isoneutral.isoneutral_diffusion_tracer(vs, tracer_data, dtracer_skew,
-                                                       iso=False, skew=True)
-               #Ask Dion about how to redo this
+                dtracer_skew = npx.zeros_like(tracer_data[..., 0])
+                tracer_data = isoneutral.diffusion.isoneutral_diffusion_tracer(
+                              state, tracer_data, dtracer_skew, iso=False, skew=True
+                               )
+              
         """
         Vertical mixing of tracers
         """
@@ -820,8 +823,8 @@ def npzd(state):
     #    vs.npzd_tracers[tracer][:, :, :, vs.taup1] += change
 
     # prepare next timestep with minimum tracer values
-    for tracer in vs.npzd_tracers.values():
-        tracer[:, :, :, vs.taup1] = np.maximum(tracer[:, :, :, vs.taup1], vs.trcmin * vs.maskT)
+    for tracer in settings.npzd_tracers.values():
+        tracer.data[:, :, :, vs.taup1] = npx.maximum(tracer[:, :, :, vs.taup1], settings.trcmin * vs.maskT)
 
     for tracer in vs.npzd_tracers.values():
         utilities.enforce_boundaries(vs, tracer)
