@@ -8,6 +8,7 @@ from veros import veros_method
 from veros import time
 from veros.core import diffusion, thermodynamics, utilities
 from veros.core import isoneutral
+from veros.core.operators import update, update_add, update_multiply
 from veros.variables import allocate
 
 
@@ -696,11 +697,11 @@ def setupNPZD(state):
     #    vs.zprefs[preference] /= zprefsum
 
     # Keep derivatives of everything for advection
-    for tracer, data in setings.npzd_tracers.items():
-        settings.npzd_advection_derivatives[tracer] = npx.zeros_like(data)
+    for tracer, data in settings.npzd_tracers.items():
+        settings.npzd_advection_derivatives[tracer] = npx.zeros_like(data.data)
 
     # Temporary tracers are necessary to only return differences
-    for tracer, data in setings.npzd_tracers.items():
+    for tracer, data in settings.npzd_tracers.items():
         settings.temporary_tracers[tracer] = npx.empty_like(data[..., 0])
 
 
