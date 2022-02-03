@@ -747,8 +747,8 @@ def npzd(state):
     c_tri[:, :, :-1] = -delta[:, :, :-1] / vs.dzt[npx.newaxis, npx.newaxis, :-1]
 
     for tracer in settings.npzd_transported_tracers:
-        tracer_data = settings.npzd_tracers[tracer].data
-        tr = settings.npzd_tracers[tracer].name
+        tracer_data = tracer.data
+        tr = tracer.name
 
         """
         Advection of tracers
@@ -813,10 +813,17 @@ def npzd(state):
         d_tri[:, :, :] = tracer_data[2:-2, 2:-2, :, vs.taup1]
         # TODO: surface flux?
         # d_tri[:, :, -1] += surface_forcing
-        sol, mask = utilities.solve_implicit(vs, ks, a_tri, b_tri, c_tri, d_tri, b_edge=b_tri_edge)
+        
+        land_mask, water_mask, edge_mask = utilities.create_water_masks(ks)
+        sol = utilities.solve_implicit(a_tri, b_tri, c_tri, d_tri,
+                                       water_mask, edge_mask, b_edge=b_tri_edge
+                                      )
 
-        tracer_data[2:-2, 2:-2, :, vs.taup1] = utilities.where(vs, mask, sol,
-                                                               tracer_data[2:-2, 2:-2, :, vs.taup1])
+        tracer_data = update(
+                             tracer_data,
+                             at[2:-2, 2:-2, :, vs.taup1],
+                             mask*sol + npx.logical_not(mask)*tracer_data[2:-2, 2:-2, :, vs.taup1]
+                            )
 
     # update by biogeochemical changes
     #for tracer, change in npzd_changes.items():
@@ -827,4 +834,4 @@ def npzd(state):
         tracer.data[:, :, :, vs.taup1] = npx.maximum(tracer[:, :, :, vs.taup1], settings.trcmin * vs.maskT)
 
     for tracer in vs.npzd_tracers.values():
-        utilities.enforce_boundaries(vs, tracer)
+        utilities.enforce_boundaries(tracer.data)
