@@ -311,7 +311,7 @@ class GlobalFourDegreeBGC(VerosSetup):
         mask = npx.logical_and(vs.temp[:, :, -1, vs.tau] * vs.maskT[:, :, -1] < -1.8, vs.forc_temp_surface < 0.0)
         vs.forc_temp_surface = npx.where(mask, 0.0, vs.forc_temp_surface)
         vs.forc_salt_surface = npx.where(mask, 0.0, vs.forc_salt_surface)
-        if vs.enable_npzd:
+        if settings.enable_npzd:
             # incoming shortwave radiation for plankton production
             vs.swr[2:-2, 2:-2] = (f1 * vs.swr_initial[:, :, n1] + f2 * vs.swr_initial[:, :, n2])
         
