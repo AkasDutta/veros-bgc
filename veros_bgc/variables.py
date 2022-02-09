@@ -1,4 +1,3 @@
-#Remove output=.. statements
 #Add time_dependent=false where relevant
 
 from veros.variables import Variable, T_GRID, T_HOR, YT, TIMESTEPS
@@ -19,7 +18,6 @@ VARIABLES = {
         T_GRID + TIMESTEPS,
         "mmol/m^3?",
         "Concentration of phytoplankton in grid box",
-         output=True,
          write_to_restart=True,
         active=lambda settings:settings.enable_npzd
     ),
@@ -28,7 +26,6 @@ VARIABLES = {
         T_GRID + TIMESTEPS,
         "mmol/m^3?",
         "Concentration of zooplankton in grid box,"
-        output=True,
         write_to_restart=True,
         active=lambda settings:settings.enable_npzd
     ),
@@ -37,14 +34,12 @@ VARIABLES = {
         T_GRID + TIMESTEPS,
         "mmol/m^3?",
         "Concentration of detritus in grid box",
-        output=True,
         write_to_restart=True,
         active=lambda settings:settings.enable_npzd
     ),
     "po4": Variable(
         "Phosphate concentration",
         T_GRID+TIMESTEPS,
-        output=True,
         write_to_restart=True,
         active=lambda settings:settings.enable_npzd
     ),
@@ -86,7 +81,6 @@ VARIABLES = {
         T_GRID + TIMESTEPS,
         "mmol/m^3",
         "Concentration of inorganic carbon ions and molecules",
-        output=True,
         write_to_restart=True,
         active=lambda settings:settings.enable_carbon
     ),
@@ -95,7 +89,6 @@ VARIABLES = {
         T_GRID + TIMESTEPS,
         "mmol/m^3",
         "Combined bases and acids",
-        output=True,
         write_to_restart=True,
         active=lambda settings:settings.enable_carbon
     ),
@@ -112,7 +105,6 @@ VARIABLES = {
         T_HOR,
         "mmol/m^2/s",
         "Flux of CO2 over the ocean-atmosphere boundary",
-        output=True,
         active=lambda settings:settings.enable_carbon
     ),
     "wind_speed": Variable(
@@ -120,14 +112,12 @@ VARIABLES = {
         T_HOR,
         "m/s",
         "Just used for debugging. Please ignore",
-        output=True,
         active=lambda settings:settings.enable_carbon
     ),
     "hSWS": Variable(
         "hSWS",
         T_HOR,
         "[H] in sea water sample",
-        output=True,
         active=lambda settings:settings.enable_carbon
     ),
     "pCO2": Variable(
@@ -135,7 +125,6 @@ VARIABLES = {
         T_HOR,
         "?ppmv/atm?",
         "Partial CO2 pressure",
-        output=True,
         active=lambda settings:settings.enable_carbon
     ),
     "dpCO2": Variable(
@@ -143,7 +132,6 @@ VARIABLES = {
         T_HOR,
         "?ppmv/atm?",
         "Difference in ocean CO2 pressure and atmospheric",
-        output=True,
         active=lambda settings:settings.enable_carbon
     ),
     "co2star": Variable(
@@ -151,7 +139,6 @@ VARIABLES = {
         T_HOR,
         "?ppmv?",
         "Adjusted CO2 in ocean",
-        output=True,
         active=lambda settings:settings.enable_carbon
     ),
     "dco2star": Variable(
@@ -159,7 +146,6 @@ VARIABLES = {
         T_HOR,
         "?ppmv?",
         "Adjusted CO2 difference",
-        output=True,
         active=lambda settings:settings.enable_carbon
     ),
     "rcak": Variable(
