@@ -7,7 +7,7 @@ import ruamel.yaml as yaml
 import veros.tools
 from veros import VerosSetup, veros_routine, veros_kernel, KernelOutput, logger
 from veros.variables import Variable
-from veros.core.operators import numpy as npx, update, at, update_multiply
+from veros.core.operators import numpy as npx, update, at, update_add, update_multiply
 
 
 import veros_bgc
