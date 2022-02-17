@@ -12,7 +12,7 @@ from veros.core.operators import numpy as npx, at, update, update_add, update_mu
 from veros.variables import allocate
 
 
-@veros_method
+@veros_routine
 def biogeochemistry(vs):
     """Control function for integration of biogeochemistry
 
@@ -203,7 +203,7 @@ def general_nutrient_limitation(nutrient, saturation_constant):
     return nutrient / (saturation_constant + nutrient)
 
 
-@veros_method(inline=True)
+@veros_routine
 def phosphate_limitation_phytoplankton(vs, tracers):
     """ Phytoplankton limit to growth by phosphate limitation """
     return general_nutrient_limitation(tracers['po4'], vs.saturation_constant_N * vs.redfield_ratio_PN)
@@ -234,7 +234,7 @@ def register_npzd_data(state, tracer):
         settings.npzd_transported_tracers.append(tracer.name)
 
 
-@veros_method(inline=True)
+@veros_routine
 def _get_boundary(vs, boundary_string):
     """ Return slice representing boundary
 
@@ -256,7 +256,7 @@ def _get_boundary(vs, boundary_string):
     return tuple([slice(None, None, None)] * 3)
 
 
-@veros_method(inline=True)
+@veros_routine
 def register_npzd_rule(vs, name, rule, label=None, boundary=None, group='PRIMARY'):
     """ Make rule available to the npzd dynamics
 
@@ -308,7 +308,7 @@ def register_npzd_rule(vs, name, rule, label=None, boundary=None, group='PRIMARY
                                              boundary=_get_boundary(vs, boundary),
                                              group=group)
 
-@veros_method(inline=True)
+@veros_routine
 def register_npzd_common_source_rule(vs, name, rule, label=None, boundary=None, group='PRIMARY'):
     """ Register a rule to the model, which shares source term with other rules.
 
@@ -365,13 +365,13 @@ def register_npzd_common_source_rule(vs, name, rule, label=None, boundary=None, 
 
         # Add the source term
         # The new rule should consist of a new function, which is callable like the initial function of the rule, but only returns the source term
-        source_rule = (veros_method(lambda veros, source, sink: {source: rule[0](veros, source, sink)[source]}, inline=True), rule[1], rule[2])
+        source_rule = (veros_routine(lambda veros, source, sink: {source: rule[0](veros, source, sink)[source]}, inline=True), rule[1], rule[2])
         register_npzd_rule(vs, f'{name}_{rule[1]}', source_rule, label=label + '(source)', boundary=boundary, group=group)
 
         vs.common_source_rules[name].append(source_rule)
 
     # Register new stub rule for the sink - source is assumed common so only added for the first
-    sink_rule = (veros_method(lambda veros, source, sink: {sink: rule[0](veros, source, sink)[sink]}, inline=True), rule[1], rule[2])
+    sink_rule = (veros_routine(lambda veros, source, sink: {sink: rule[0](veros, source, sink)[sink]}, inline=True), rule[1], rule[2])
     register_npzd_rule(vs, f'{name}_{rule[2]}', sink_rule, label=label, boundary=boundary, group=group)
 
     vs.common_source_rules[name].append(sink_rule)
@@ -392,7 +392,7 @@ def register_npzd_common_source_rule(vs, name, rule, label=None, boundary=None, 
         raise ValueError(f'Common source rules should have a common source, but {registered_source.name} did not match {registered_sink.name}. Expected {registered_source.source}, got {rule[1]}')
 
 
-@veros_method(inline=True)
+@veros_routine
 def select_npzd_rule(vs, name):
     """
     Select rule for the NPZD model
@@ -445,7 +445,7 @@ def setup_physics_only(state):
     
     
 
-@veros_method(inline=True)
+@veros_routine
 def setup_basic_npzd_rules(state):
     """
     Setup rules for basic NPZD model including phosphate, detritus, phytoplankton and zooplankton
@@ -549,7 +549,7 @@ def setup_basic_npzd_rules(state):
     register_npzd_rule(vs, 'empty_rule', (empty_rule, None, None))
 
 
-@veros_method(inline=True)
+@veros_routine
 def setup_carbon_npzd_rules(vs):
     """
     Rules for including a carbon cycle
