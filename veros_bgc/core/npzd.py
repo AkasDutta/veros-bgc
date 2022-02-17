@@ -4,7 +4,7 @@ Contains veros methods for handling bio- and geochemistry
 """
 from collections import namedtuple
 
-from veros import veros_method
+from veros import veros_kernel, veros_routine, KernelOutput
 from veros import time
 from veros.core import diffusion, thermodynamics, utilities
 from veros.core import isoneutral
