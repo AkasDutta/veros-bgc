@@ -674,8 +674,8 @@ def setupNPZD(state):
     #                                 label='Excretion')
 
     #register_npzd_common_source_rule(vs, 'npzd_basic_zooplankton_excretion',
-                                     (excretion, 'zooplankton', 'DIC'),
-                                     label='Excretion')
+    #                                 (excretion, 'zooplankton', 'DIC'),
+    #                                 label='Excretion')
 
     # Turn common source rules into selectable rules
     # We should not have to make this check, it should just be defined
