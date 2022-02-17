@@ -60,7 +60,7 @@ VARIABLES = {
     "dayfrac": Variable(
         "Fraction of day with sunlight",
         YT,
-        1
+        1,
         "Fraction of day with sunlight",
         active=lambda settings:settings.enable_npzd
     ),
