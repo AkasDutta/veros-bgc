@@ -25,7 +25,7 @@ VARIABLES = {
         "Zooplankton concentration",
         T_GRID + TIMESTEPS,
         "mmol/m^3?",
-        "Concentration of zooplankton in grid box,"
+        "Concentration of zooplankton in grid box",
         write_to_restart=True,
         active=lambda settings:settings.enable_npzd
     ),
