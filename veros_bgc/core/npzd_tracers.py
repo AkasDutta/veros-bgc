@@ -50,6 +50,9 @@ class NPZD_tracer():
 
     def __new__(cls, name, input_array, sinking_speed=None,
                  light_attenuation=None, transport=True, description=None):
+        
+        obj = super().__new__(cls)
+        
         if sinking_speed is not None:
             obj.sinking_speed = sinking_speed
         if light_attenuation is not None:
@@ -100,9 +103,10 @@ class Recyclable_tracer(NPZD_tracer):
 
     + All attributes held by super class
     """
-    def __init__(self, name, input_array, recycling_rate=0, **kwargs):
-        self.recycling_rate = recycling_rate
-        super.__init__()
+    def __new__(cls, name, input_array, recycling_rate=0, **kwargs):
+        obj = super().__new__(cls, name, input_array, recycling_rate=0)
+        obj.recycling_rate = recycling_rate
+        return obj
         
 
     @veros_routine
