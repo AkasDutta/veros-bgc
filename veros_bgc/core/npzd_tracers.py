@@ -48,21 +48,20 @@ class NPZD_tracer():
         If set: Factor for how much light is blocked
     """
 
-    def __init__(self, name, input_array, sinking_speed=None,
+    def __new__(cls, name, input_array, sinking_speed=None,
                  light_attenuation=None, transport=True, description=None):
-        
-        self.name = name
-        self.data = input_array
-        
         if sinking_speed is not None:
-           self.sinking_speed = sinking_speed
-        
+            obj.sinking_speed = sinking_speed
         if light_attenuation is not None:
-           self.light_attenuation = light_attenuation
-        
-        transport = self.transport
-        description = self.description
-        
+            obj.light_attenuation = light_attenuation
+
+        obj.name = name
+        obj.data = input_array
+        obj.transport = transport
+        obj.description = description
+
+        return obj
+       
 
 #    def __array_finalize__(self, obj):
 #        if obj is None:
