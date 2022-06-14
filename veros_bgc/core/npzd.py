@@ -4,13 +4,15 @@ Contains veros methods for handling bio- and geochemistry
 """
 from collections import namedtuple
 
-from veros import veros_method
+from veros import veros_kernel, veros_routine, KernelOutput
 from veros import time
-from veros.core import diffusion, thermodynamics, utilities, isoneutral
+from veros.core import diffusion, thermodynamics, utilities
+from veros.core import isoneutral
+from veros.core.operators import numpy as npx, at, update, update_add, update_multiply
 from veros.variables import allocate
 
 
-@veros_method
+@veros_routine
 def biogeochemistry(vs):
     """Control function for integration of biogeochemistry
 
@@ -201,14 +203,14 @@ def general_nutrient_limitation(nutrient, saturation_constant):
     return nutrient / (saturation_constant + nutrient)
 
 
-@veros_method(inline=True)
+@veros_routine
 def phosphate_limitation_phytoplankton(vs, tracers):
     """ Phytoplankton limit to growth by phosphate limitation """
     return general_nutrient_limitation(tracers['po4'], vs.saturation_constant_N * vs.redfield_ratio_PN)
 
 
-@veros_method(inline=True)
-def register_npzd_data(vs, tracer):
+@veros_routine
+def register_npzd_data(state, tracer):
     """ Add tracer to the NPZD data set and create node in interaction graph
 
     Tracers added are available in the npzd dynamics and is automatically
@@ -220,17 +222,19 @@ def register_npzd_data(vs, tracer):
         An instance of :obj:`veros.core.npzd_tracer.NPZD_tracer`
         to be included in biogeochemistry calculations
     """
+    vs = state.variables
+    settings = state.settings
 
-    if tracer.name in vs.npzd_tracers.keys():
+    if tracer.name in settings.npzd_tracers.keys():
         raise ValueError('{name} has already been added to the NPZD data set'.format(name=tracer.name))
 
-    vs.npzd_tracers[tracer.name] = tracer
+    settings.npzd_tracers[tracer.name] = tracer
 
     if tracer.transport:
-        vs.npzd_transported_tracers.append(tracer.name)
+        settings.npzd_transported_tracers.append(tracer.name)
 
 
-@veros_method(inline=True)
+@veros_routine
 def _get_boundary(vs, boundary_string):
     """ Return slice representing boundary
 
@@ -252,7 +256,7 @@ def _get_boundary(vs, boundary_string):
     return tuple([slice(None, None, None)] * 3)
 
 
-@veros_method(inline=True)
+@veros_routine
 def register_npzd_rule(vs, name, rule, label=None, boundary=None, group='PRIMARY'):
     """ Make rule available to the npzd dynamics
 
@@ -304,7 +308,7 @@ def register_npzd_rule(vs, name, rule, label=None, boundary=None, group='PRIMARY
                                              boundary=_get_boundary(vs, boundary),
                                              group=group)
 
-@veros_method(inline=True)
+@veros_routine
 def register_npzd_common_source_rule(vs, name, rule, label=None, boundary=None, group='PRIMARY'):
     """ Register a rule to the model, which shares source term with other rules.
 
@@ -361,13 +365,13 @@ def register_npzd_common_source_rule(vs, name, rule, label=None, boundary=None, 
 
         # Add the source term
         # The new rule should consist of a new function, which is callable like the initial function of the rule, but only returns the source term
-        source_rule = (veros_method(lambda veros, source, sink: {source: rule[0](veros, source, sink)[source]}, inline=True), rule[1], rule[2])
+        source_rule = (veros_routine(lambda veros, source, sink: {source: rule[0](veros, source, sink)[source]}, inline=True), rule[1], rule[2])
         register_npzd_rule(vs, f'{name}_{rule[1]}', source_rule, label=label + '(source)', boundary=boundary, group=group)
 
         vs.common_source_rules[name].append(source_rule)
 
     # Register new stub rule for the sink - source is assumed common so only added for the first
-    sink_rule = (veros_method(lambda veros, source, sink: {sink: rule[0](veros, source, sink)[sink]}, inline=True), rule[1], rule[2])
+    sink_rule = (veros_routine(lambda veros, source, sink: {sink: rule[0](veros, source, sink)[sink]}, inline=True), rule[1], rule[2])
     register_npzd_rule(vs, f'{name}_{rule[2]}', sink_rule, label=label, boundary=boundary, group=group)
 
     vs.common_source_rules[name].append(sink_rule)
@@ -388,7 +392,7 @@ def register_npzd_common_source_rule(vs, name, rule, label=None, boundary=None, 
         raise ValueError(f'Common source rules should have a common source, but {registered_source.name} did not match {registered_sink.name}. Expected {registered_source.source}, got {rule[1]}')
 
 
-@veros_method(inline=True)
+@veros_routine
 def select_npzd_rule(vs, name):
     """
     Select rule for the NPZD model
@@ -423,10 +427,26 @@ def select_npzd_rule(vs, name):
 
     else:
         raise TypeError('Rule must be of type tuple or list')
+        
 
+@veros_routine
+def setup_physics_only(state):
+    '''
+    Ignore this function.
+    Basically setup the diffusion of phosphate alone. No biological functionality. Checks that advection and mixing are working correctly
+    '''
+    from .npzd_tracers import NPZD_tracer
+    vs = state.variables
+    settings = state.settings
+    
+    po4 = NPZD_tracer("po4", vs.po4)
+    register_npzd_data(po4)
+    
+    
+    
 
-@veros_method(inline=True)
-def setup_basic_npzd_rules(vs):
+@veros_routine
+def setup_basic_npzd_rules(state):
     """
     Setup rules for basic NPZD model including phosphate, detritus, phytoplankton and zooplankton
     """
@@ -435,6 +455,9 @@ def setup_basic_npzd_rules(vs):
         bottom_remineralization_detritus_po4
 
     from .npzd_tracers import Recyclable_tracer, Phytoplankton, Zooplankton, NPZD_tracer
+    
+    vs = state.variables
+    settings = state.settings
 
     # TODO - couldn't this be created elsewhere or can I use vs.kbot more efficiently?
     vs.bottom_mask[:, :, :] = np.arange(vs.nz)[np.newaxis, np.newaxis, :] == (vs.kbot - 1)[:, :, np.newaxis]
@@ -526,7 +549,7 @@ def setup_basic_npzd_rules(vs):
     register_npzd_rule(vs, 'empty_rule', (empty_rule, None, None))
 
 
-@veros_method(inline=True)
+@veros_routine
 def setup_carbon_npzd_rules(vs):
     """
     Rules for including a carbon cycle
@@ -629,57 +652,61 @@ def setup_carbon_npzd_rules(vs):
     ])
 
 
-@veros_method
-def setupNPZD(vs):
+@veros_routine
+def setupNPZD(state):
     """Taking veros variables and packaging them up into iterables"""
-    if not vs.enable_npzd:
+    
+    vs=state.variables
+    settings=state.settings
+    
+    if not settings.enable_npzd:
         return
 
-    setup_basic_npzd_rules(vs)
+    setup_physics_only(state)
 
     # Add carbon to the model
     if vs.enable_carbon:
         setup_carbon_npzd_rules(vs)
 
-    from .npzd_rules import excretion
-    register_npzd_common_source_rule(vs, 'npzd_basic_zooplankton_excretion',
-                                     (excretion, 'zooplankton', 'po4'),
-                                     label='Excretion')
+    #from .npzd_rules import excretion
+    #register_npzd_common_source_rule(vs, 'npzd_basic_zooplankton_excretion',
+    #                                 (excretion, 'zooplankton', 'po4'),
+    #                                 label='Excretion')
 
-    register_npzd_common_source_rule(vs, 'npzd_basic_zooplankton_excretion',
-                                     (excretion, 'zooplankton', 'DIC'),
-                                     label='Excretion')
+    #register_npzd_common_source_rule(vs, 'npzd_basic_zooplankton_excretion',
+    #                                 (excretion, 'zooplankton', 'DIC'),
+    #                                 label='Excretion')
 
     # Turn common source rules into selectable rules
     # We should not have to make this check, it should just be defined
-    if hasattr(vs, 'common_source_rules'):
+    #if hasattr(vs, 'common_source_rules'):
         # All common source rules have been saved to a dictionary
         # where the key is the collection identifier and individual rules are
         # named after the convention {collection_name}_{tracer_name}
-        for name, rules in vs.common_source_rules.items():
-            collection = [name + "_" + rules[0][1]] + [name + "_" + rules[i][2] for i in range(1, len(rules))]
-            register_npzd_rule(vs, name, collection)
+    #    for name, rules in vs.common_source_rules.items():
+    #        collection = [name + "_" + rules[0][1]] + [name + "_" + rules[i][2] for i in range(1, len(rules))]
+    #        register_npzd_rule(vs, name, collection)
 
-    for rule in vs.npzd_selected_rules:
-        select_npzd_rule(vs, rule)
+    #for rule in vs.npzd_selected_rules:
+    #    select_npzd_rule(vs, rule)
 
     # Update Zooplankton preferences dynamically
     # Ideally this would be done in the Zooplankton class
-    zprefsum = sum(vs.zprefs.values())
-    for preference in vs.zprefs:
-        vs.zprefs[preference] /= zprefsum
+    #zprefsum = sum(vs.zprefs.values())
+    #for preference in vs.zprefs:
+    #    vs.zprefs[preference] /= zprefsum
 
     # Keep derivatives of everything for advection
-    for tracer, data in vs.npzd_tracers.items():
-        vs.npzd_advection_derivatives[tracer] = np.zeros_like(data)
+    for tracer, data in settings.npzd_tracers.items():
+        settings.npzd_advection_derivatives[tracer] = npx.zeros_like(data.data)
 
     # Temporary tracers are necessary to only return differences
-    for tracer, data in vs.npzd_tracers.items():
-        vs.temporary_tracers[tracer] = np.empty_like(data[..., 0])
+    for tracer, data in settings.npzd_tracers.items():
+        settings.temporary_tracers[tracer] = npx.empty_like(data[..., 0])
 
 
-@veros_method
-def npzd(vs):
+@veros_routine
+def npzd(state):
     r"""
     Main driving function for NPZD functionality
 
@@ -689,65 +716,76 @@ def npzd(vs):
         \dfrac{\partial C_i}{\partial t} = T + S
     \end{equation}
     """
-    if not vs.enable_npzd:
+    vs = state.variables
+    settings = state.settings
+    
+    
+    if not settings.enable_npzd:
         return
 
     # TODO: Refactor transportation code to be defined only once and also used by thermodynamics
     # TODO: Dissipation on W-grid if necessary
 
-    npzd_changes = biogeochemistry(vs)
+    #npzd_changes = biogeochemistry(vs)
 
     """
     For vertical mixing
     """
 
-    a_tri = allocate(vs, ('xt', 'yt', 'zt'), include_ghosts=False)
-    b_tri = allocate(vs, ('xt', 'yt', 'zt'), include_ghosts=False)
-    c_tri = allocate(vs, ('xt', 'yt', 'zt'), include_ghosts=False)
-    d_tri = allocate(vs, ('xt', 'yt', 'zt'), include_ghosts=False)
-    delta = allocate(vs, ('xt', 'yt', 'zt'), include_ghosts=False)
+    a_tri = allocate(state.dimensions, ("xt", "yt", "zt"), include_ghosts=False)
+    b_tri = allocate(state.dimensions, ("xt", "yt", "zt"), include_ghosts=False)
+    c_tri = allocate(state.dimensions, ("xt", "yt", "zt"), include_ghosts=False)
+    d_tri = allocate(state.dimensions, ("xt", "yt", "zt"), include_ghosts=False)
+    delta = allocate(state.dimensions, ("xt", "yt", "zt"), include_ghosts=False)
 
     ks = vs.kbot[2:-2, 2:-2] - 1
-    delta[:, :, :-1] = vs.dt_tracer / vs.dzw[np.newaxis, np.newaxis, :-1]\
+    delta[:, :, :-1] = settings.dt_tracer / vs.dzw[npx.newaxis, npx.newaxis, :-1]\
         * vs.kappaH[2:-2, 2:-2, :-1]
     delta[:, :, -1] = 0
-    a_tri[:, :, 1:] = -delta[:, :, :-1] / vs.dzt[np.newaxis, np.newaxis, 1:]
-    b_tri[:, :, 1:] = 1 + (delta[:, :, 1:] + delta[:, :, :-1]) / vs.dzt[np.newaxis, np.newaxis, 1:]
-    b_tri_edge = 1 + delta / vs.dzt[np.newaxis, np.newaxis, :]
-    c_tri[:, :, :-1] = -delta[:, :, :-1] / vs.dzt[np.newaxis, np.newaxis, :-1]
+    a_tri[:, :, 1:] = -delta[:, :, :-1] / vs.dzt[npx.newaxis, npx.newaxis, 1:]
+    b_tri[:, :, 1:] = 1 + (delta[:, :, 1:] + delta[:, :, :-1]) / vs.dzt[npx.newaxis, npx.newaxis, 1:]
+    b_tri_edge = 1 + delta / vs.dzt[npx.newaxis, npx.newaxis, :]
+    c_tri[:, :, :-1] = -delta[:, :, :-1] / vs.dzt[npx.newaxis, npx.newaxis, :-1]
 
-    for tracer in vs.npzd_transported_tracers:
-        tracer_data = vs.npzd_tracers[tracer]
+    for tracer in settings.npzd_transported_tracers:
+        tracer_data = tracer.data
+        tr = tracer.name
 
         """
         Advection of tracers
         """
-        thermodynamics.advect_tracer(vs, tracer_data[:, :, :, vs.tau],
-                                     vs.npzd_advection_derivatives[tracer][:, :, :, vs.tau])
+        settings.npzd_advection_derivatives[tr][:, :, :, vs.tau] = thermodynamics.advect_tracer(
+                                                                  state, tracer_data[:, :, :, settings.tau])
+                                     
 
         # Adam-Bashforth timestepping
-        tracer_data[:, :, :, vs.taup1] = tracer_data[:, :, :, vs.tau] + vs.dt_tracer \
-            * ((1.5 + vs.AB_eps) * vs.npzd_advection_derivatives[tracer][:, :, :, vs.tau]
-               - (0.5 + vs.AB_eps) * vs.npzd_advection_derivatives[tracer][:, :, :, vs.taum1])\
+        tracer_data[:, :, :, vs.taup1] = tracer_data[:, :, :, vs.tau] + settings.dt_tracer \
+            * ((1.5 + settings.AB_eps) * settings.npzd_advection_derivatives[tr][:, :, :, vs.tau]
+               - (0.5 + settings.AB_eps) * settings.npzd_advection_derivatives[tr][:, :, :, vs.taum1])\
             * vs.maskT
 
         """
         Diffusion of tracers
         """
 
-        if vs.enable_hor_diffusion:
-            horizontal_diffusion_change = np.zeros_like(tracer_data[:, :, :, 0])
-            diffusion.horizontal_diffusion(vs, tracer_data[:, :, :, vs.tau],
-                                           horizontal_diffusion_change)
+        if settings.enable_hor_diffusion:
+            horizontal_diffusion_change = npx.zeros_like(tracer_data[:, :, :, 0])
+            horizontal_diffusion_change = diffusion.horizontal_diffusion(
+                                       state, tracer_data[:, :, :, vs.tau], settings.K_h)
 
-            tracer_data[:, :, :, vs.taup1] += vs.dt_tracer * horizontal_diffusion_change
+            tracer_data = update_add(tracer_data, at[:,:,:, vs.taup1],
+                                     settings.dt_tracer * horizontal_diffusion_change)
+            
 
-        if vs.enable_biharmonic_mixing:
-            biharmonic_diffusion_change = np.empty_like(tracer_data[:, :, :, 0])
-            diffusion.biharmonic(vs, tracer_data[:, :, :, vs.tau],
-                                 np.sqrt(abs(vs.K_hbi)), biharmonic_diffusion_change)
-
-            tracer_data[:, :, :, vs.taup1] += vs.dt_tracer * biharmonic_diffusion_change
+        if settings.enable_biharmonic_mixing:
+            biharmonic_diffusion_change = npx.empty_like(tracer_data[:, :, :, 0])
+            biharmonic_diffusion_change = diffusion.biharmonic_diffusion(
+                                          state, tracer_data[:, :, :, vs.tau],
+                                          npx.sqrt(abs(settings.K_hbi))
+                                          )
+            
+            tracer_data = update_add(tracer_data, at[:, :, :, vs.taup1],
+                                    settings.dt_tracer*biharmonic_diffusion_change)
 
         """
         Restoring zones
@@ -757,34 +795,44 @@ def npzd(vs):
         """
         Isopycnal diffusion
         """
-        if vs.enable_neutral_diffusion:
-            dtracer_iso = np.zeros_like(tracer_data[..., 0])
+        if settings.enable_neutral_diffusion:
+            dtracer_iso = npx.zeros_like(tracer_data[..., 0])
 
-            isoneutral.isoneutral_diffusion_tracer(vs, tracer_data, dtracer_iso,
-                                                   iso=True, skew=False)
+            tracer_data = isoneutral.diffusion.isoneutral_diffusion_tracer(
+                          state, tracer_data, dtracer_iso, iso=True, skew=False
+                           )
 
-            if vs.enable_skew_diffusion:
-                dtracer_skew = np.zeros_like(tracer_data[..., 0])
-                isoneutral.isoneutral_diffusion_tracer(vs, tracer_data, dtracer_skew,
-                                                       iso=False, skew=True)
+            if settings.enable_skew_diffusion:
+                dtracer_skew = npx.zeros_like(tracer_data[..., 0])
+                tracer_data = isoneutral.diffusion.isoneutral_diffusion_tracer(
+                              state, tracer_data, dtracer_skew, iso=False, skew=True
+                               )
+              
         """
         Vertical mixing of tracers
         """
         d_tri[:, :, :] = tracer_data[2:-2, 2:-2, :, vs.taup1]
         # TODO: surface flux?
         # d_tri[:, :, -1] += surface_forcing
-        sol, mask = utilities.solve_implicit(vs, ks, a_tri, b_tri, c_tri, d_tri, b_edge=b_tri_edge)
+        
+        land_mask, water_mask, edge_mask = utilities.create_water_masks(ks)
+        sol = utilities.solve_implicit(a_tri, b_tri, c_tri, d_tri,
+                                       water_mask, edge_mask, b_edge=b_tri_edge
+                                      )
 
-        tracer_data[2:-2, 2:-2, :, vs.taup1] = utilities.where(vs, mask, sol,
-                                                               tracer_data[2:-2, 2:-2, :, vs.taup1])
+        tracer_data = update(
+                             tracer_data,
+                             at[2:-2, 2:-2, :, vs.taup1],
+                             mask*sol + npx.logical_not(mask)*tracer_data[2:-2, 2:-2, :, vs.taup1]
+                            )
 
     # update by biogeochemical changes
-    for tracer, change in npzd_changes.items():
-        vs.npzd_tracers[tracer][:, :, :, vs.taup1] += change
+    #for tracer, change in npzd_changes.items():
+    #    vs.npzd_tracers[tracer][:, :, :, vs.taup1] += change
 
     # prepare next timestep with minimum tracer values
-    for tracer in vs.npzd_tracers.values():
-        tracer[:, :, :, vs.taup1] = np.maximum(tracer[:, :, :, vs.taup1], vs.trcmin * vs.maskT)
+    for tracer in settings.npzd_tracers.values():
+        tracer.data[:, :, :, vs.taup1] = npx.maximum(tracer[:, :, :, vs.taup1], settings.trcmin * vs.maskT)
 
     for tracer in vs.npzd_tracers.values():
-        utilities.enforce_boundaries(vs, tracer)
+        utilities.enforce_boundaries(tracer.data)
