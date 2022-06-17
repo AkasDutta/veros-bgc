@@ -1,0 +1,1 @@
+from veros_bgc.setup.bgc_phyonly_global_4deg.bgc_phyonly_global_four_degree import GlobalFourDegreeBGC

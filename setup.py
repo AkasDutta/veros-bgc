@@ -30,7 +30,8 @@ INSTALL_REQUIRES = [
 ]
 
 PACKAGE_DATA = [
-    'setup/*/assets.yml', 'setup/*/npzd.yml',
+    'setup/*/assets.yml', 'setup/*/npzd_rules.yml',
+    'setup/*/npzd_tracers.yml',
     'setup/*/*.npy', 'setup/*/*.png'
 ]
 

@@ -1,6 +1,7 @@
 from loguru import logger
 
 from veros.diagnostics.diagnostic import VerosDiagnostic
+from veros.core.operators import numpy as npx, update, at, update_add, update_multiply
 from veros import veros_method
 
 
@@ -8,7 +9,7 @@ class NPZDMonitor(VerosDiagnostic):
     """Diagnostic monitoring nutrients and plankton concentrations
     """
 
-    name = 'npzd'  #:
+    name = "npzd"  #:
     output_frequency = None  #: Frequency (in seconds) in which output is written
     restart_attributes = []
     save_graph = False  #: Whether or not to save a graph of the selected dynamics
@@ -27,31 +28,43 @@ class NPZDMonitor(VerosDiagnostic):
         self.dic_total = 0
 
     @veros_method
-    def initialize(self, vs):
-        cell_volume = vs.area_t[2:-2, 2:-2, np.newaxis] * vs.dzt[np.newaxis, np.newaxis, :] * vs.maskT[2:-2, 2:-2, :]
+    def initialize(self, state):
+        vs = state.variables
+        settings = state.settings
 
-        po4_sum = vs.phytoplankton[2:-2, 2:-2, :, vs.tau] * vs.redfield_ratio_PN\
-                  + vs.detritus[2:-2, 2:-2, :, vs.tau] * vs.redfield_ratio_PN\
-                  + vs.zooplankton[2:-2, 2:-2, :, vs.tau] * vs.redfield_ratio_PN\
-                  + vs.po4[2:-2, 2:-2, :, vs.tau]
+        cell_volume = vs.area_t[2:-2, 2:-2, npx.newaxis] * vs.dzt[npx.newaxis, npx.newaxis, :] * vs.maskT[2:-2, 2:-2, :]
+        
+        if settings.enable_npzd:
 
-        self.po4_total = np.sum(po4_sum * cell_volume)
+            po4_sum = vs.phytoplankton[2:-2, 2:-2, :, vs.tau] * settings.redfield_ratio_PN \
+                    + vs.detritus[2:-2, 2:-2, :, vs.tau] * settings.redfield_ratio_PN \
+                    + vs.zooplankton[2:-2, 2:-2, :, vs.tau] * settings.redfield_ratio_PN \
+                    + vs.po4[2:-2, 2:-2, :, vs.tau]
+        else:
+            po4_sum = vs.po4[2:-2, 2:-2, :, vs.tau]
 
-        if vs.enable_carbon:
-            dic_sum = vs.phytoplankton[2:-2, 2:-2, :, vs.tau] * vs.redfield_ratio_CN\
-                      + vs.detritus[2:-2, 2:-2, :, vs.tau] * vs.redfield_ratio_CN\
-                      + vs.zooplankton[2:-2, 2:-2, :, vs.tau] * vs.redfield_ratio_CN\
+        self.po4_total = npx.sum(po4_sum * cell_volume)
+
+        if settings.enable_carbon:
+            dic_sum = vs.phytoplankton[2:-2, 2:-2, :, vs.tau] * settings.redfeld_ratio_CN\
+                      + vs.detritus[2:-2, 2:-2, :, vs.tau] * settings.redfeld_ratio_CN\
+                      + vs.zooplankton[2:-2, 2:-2, :, vs.tau] * settings.redfeld_ratio_CN\
                       + vs.dic[2:-2, 2:-2, :, vs.tau]
 
-            self.dic_total = np.sum(dic_sum * cell_volume)
+            self.dic_total = npx.sum(dic_sum * cell_volume)
 
-    def diagnose(self, vs):
+    def diagnose(self, state):
         pass
 
     @veros_method
-    def output(self, vs):
-        """Print NPZD interaction graph
+    def output(self, state):
         """
+        Print NPZD interaction graph
+        """
+        vs  = state.variables
+        settings = state.settings
+
+        #Will update the graph bit later
         if self.save_graph:
             from graphviz import Digraph
             npzd_graph = Digraph('npzd_dynamics', filename='npzd_dynamics.gv')
@@ -109,46 +122,49 @@ class NPZDMonitor(VerosDiagnostic):
         """
         Total phosphorus should be (approximately) constant
         """
-        cell_volume = vs.area_t[2:-2, 2:-2, np.newaxis] * vs.dzt[np.newaxis, np.newaxis, :] * vs.maskT[2:-2, 2:-2, :]
+        cell_volume = vs.area_t[2:-2, 2:-2, npx.newaxis] * vs.dzt[npx.newaxis, npx.newaxis, :] * vs.maskT[2:-2, 2:-2, :]
 
-        po4_sum = vs.phytoplankton[2:-2, 2:-2, :, vs.tau] * vs.redfield_ratio_PN\
-                  + vs.detritus[2:-2, 2:-2, :, vs.tau] * vs.redfield_ratio_PN\
-                  + vs.zooplankton[2:-2, 2:-2, :, vs.tau] * vs.redfield_ratio_PN\
-                  + vs.po4[2:-2, 2:-2, :, vs.tau]
+        if settings.enable_npzd:
+            po4_sum = vs.phytoplankton[2:-2, 2:-2, :, vs.tau] * settings.redfeld_ratio_PN\
+                    + vs.detritus[2:-2, 2:-2, :, vs.tau] * settings.redfeld_ratio_PN\
+                    + vs.zooplankton[2:-2, 2:-2, :, vs.tau] * settings.redfeld_ratio_PN\
+                    + vs.po4[2:-2, 2:-2, :, vs.tau]
+        else:
+            po4_sum = vs.po4[2:-2, 2:-2, :, vs.tau]
 
-        if vs.enable_carbon:
-            dic_sum = vs.phytoplankton[2:-2, 2:-2, :, vs.tau] * vs.redfield_ratio_CN\
-                      + vs.detritus[2:-2, 2:-2, :, vs.tau] * vs.redfield_ratio_CN\
-                      + vs.zooplankton[2:-2, 2:-2, :, vs.tau] * vs.redfield_ratio_CN\
+        if settings.enable_carbon:
+            dic_sum = vs.phytoplankton[2:-2, 2:-2, :, vs.tau] * settings.redfeld_ratio_CN\
+                      + vs.detritus[2:-2, 2:-2, :, vs.tau] * settings.redfeld_ratio_CN\
+                      + vs.zooplankton[2:-2, 2:-2, :, vs.tau] * settings.redfeld_ratio_CN\
                       + vs.dic[2:-2, 2:-2, :, vs.tau]
 
-        po4_total = np.sum(po4_sum * cell_volume)
-        logger.diagnostic(' total phosphorus: {}, relative change: {}'.format(po4_total, (po4_total - self.po4_total)/self.po4_total))
+        po4_total = npx.sum(po4_sum * cell_volume)
+        logger.diagnostic(" total phosphorus: {}, relative change: {}".format(po4_total, (po4_total - self.po4_total)/self.po4_total))
         self.po4_total = po4_total[...]
 
-        if vs.enable_carbon:
-            dic_total = np.sum(dic_sum * cell_volume)
-            logger.diagnostic(' total DIC: {}, relative change: {}'.format(dic_total, (dic_total - self.dic_total)/self.dic_total))
+        if settings.enable_carbon:
+            dic_total = npx.sum(dic_sum * cell_volume)
+            logger.diagnostic(" total DIC: {}, relative change: {}".format(dic_total, (dic_total - self.dic_total)/self.dic_total))
             self.dic_total = dic_total.copy()
 
         for var in self.output_variables:
             if var in vs.recycled:
-                recycled_total = np.sum(vs.recycled[var][2:-2, 2:-2, :] * cell_volume)
+                recycled_total = npx.sum(vs.recycled[var][2:-2, 2:-2, :] * cell_volume)
             else:
                 recycled_total = 0
 
             if var in vs.mortality:
-                mortality_total = np.sum(vs.mortality[var][2:-2, 2:-2, :] * cell_volume)
+                mortality_total = npx.sum(vs.mortality[var][2:-2, 2:-2, :] * cell_volume)
             else:
                 mortality_total = 0
 
             if var in vs.net_primary_production:
-                npp_total = np.sum(vs.net_primary_production[var][2:-2, 2:-2, :] * cell_volume)
+                npp_total = npx.sum(vs.net_primary_production[var][2:-2, 2:-2, :] * cell_volume)
             else:
                 npp_total = 0
 
             if var in vs.grazing:
-                grazing_total = np.sum(vs.grazing[var][2:-2, 2:-2, :] * cell_volume)
+                grazing_total = npx.sum(vs.grazing[var][2:-2, 2:-2, :] * cell_volume)
             else:
                 grazing_total = 0
 
