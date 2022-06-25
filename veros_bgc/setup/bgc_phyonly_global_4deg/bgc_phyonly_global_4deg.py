@@ -151,7 +151,7 @@ class GlobalFourDegreeBGC(VerosSetup):
     @veros_routine
     def set_coriolis(self, state):
         vs=state.variables
-        settings=state.settigs
+        settings=state.settings
         vs.coriolis_t = update(
                        vs.coriolis_t, at[...], 2 * settings.omega * npx.sin(vs.yt[npx.newaxis, :]) / 180.\
                        *settings.pi)
