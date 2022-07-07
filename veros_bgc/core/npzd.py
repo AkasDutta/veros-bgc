@@ -11,9 +11,8 @@ from veros.core import isoneutral
 from veros.core.operators import numpy as npx, at, update, update_add, update_multiply
 from veros.variables import allocate
 
-
 @veros_routine
-def biogeochemistry(state):
+def biogeochemistry(state, foodweb):
     """Control function for integration of biogeochemistry
 
     Implements a rule based strategy. Any interaction between tracers should be
@@ -24,19 +23,23 @@ def biogeochemistry(state):
     """
     vs = state.variables
     settings = state.settings
-    foodweb = settings.foodweb
+
 
     '''Preliminaries'''
 
     # Number of timesteps to do for bio tracers
     nbio = int(settings.dt_tracer // settings.dt_bio)
 
-    # temporary tracer object to store differences
+
     for tracer in foodweb.tracers.values():
-        #temporary_tracers[i] is of type array (a 3D snapshot) for all tracers i
+
+        #tracer.temp is initially a 3D slice of tracer.data at time = tau
+        #We will update it over the course of this function (many iterations of the short
+        # dt_bio) and then return it to the main function to update tracer.datai
         tracer.temp = tracer.reset_temp(state)
+
         tracer.flag = vs.maskT.astype(npx.bool)
-    light_attenuators = foodweb.light_attenuators
+
 
 
     '''At the beginning of a tracer timestep, we evaluate all pre_rules'''
@@ -44,7 +47,7 @@ def biogeochemistry(state):
     # Pre rules: Changes that need to be applied before running npzd dynamics;
     #            stored as a list
 
-    for pre_rule in settings.npzd_pre_rules:
+    for pre_rule in foodweb.pre_rules:
         updates = pre_rule.call()
         boundary = pre_rule.boundary
         for key, value in updates.items():
@@ -54,32 +57,173 @@ def biogeochemistry(state):
                     value
                 )
         
-    '''
-    Radiative considerations of PAR  
-    '''
+    #PAR considerations for primary production:
+    jmax, avej = PAR_distribution(state, foodweb)
 
+    # bio loop
+    for _ in range(nbio):
+
+        # Plankton is recycled, dying and growing
+        # pre compute amounts for use in rules
+        # for plankton in vs.plankton_types:
+        for tracer in foodweb.tracers.values():
+
+            # Nutrient-limiting growth - if no limit, growth is determined by avej
+            u = 1
+
+            # limit maximum growth, usually by nutrient deficiency
+            # and calculate primary production from that
+            if hasattr(tracer, "potential_growth"):
+                # NOTE jmax and avej are NOT updated within bio loop
+                for growth_limiting_function in foodweb.limiting_functions[tracer.name]:
+                    u = npx.minimum(u, growth_limiting_function(state, foodweb.tracers))
+
+                tracer.net_primary_production = npx.minimum(avej[tracer.name], 
+                                            u*jmax[tracer.name]) * tracer.data
+            
+            if hasattr(tracer, "grazing"):
+                tracer.thetaZ = tracer.reset_thetaZ(state)
+
+            #We want to shift everything to rules
+            #Iterate over all rules in foodweb. Evaluate flags of tracer nodes. If flags
+            #of all concerned tracers is not above minimum, kill the interaction.
+
+            for rule in foodweb.primary_rules:
+                if  isinstance(rule.sink, str):
+                    sinks = [rule.sink]
+                elif isinstance(rule.sink, list):
+                    sinks = rule.sink
+                if isinstance(rule.source, str):
+                    sources = [rule.source]
+                elif isinstance(rule.source, list):
+                    sources = [rule.source]
+                rule.flag = vs.maskT
+                for node in sources+sinks:
+                    rule.flag = update_multiply(rule.flag, at[...], foodweb.flags[node])
+
+            #Remove all calls of things like net_primary_production, recycling, mortality,
+            #grazing to rules. Keep all bgc interactions there rather than cluttering up
+            #this space.
+
+            # Calculate concentration leaving cell and entering from above
+            if hasattr(tracer, "sinking_speed"):
+                # Concentration of exported material is calculated as fraction
+                # of total concentration[:, :, ::-1], axis=2) which would have fallen through the bottom
+                # of the cell (speed / vs.dzt * vs.dtbio)
+                # vs.dtbio is accounted for later
+                npzd_export = {}; npzd_import = {}
+                npzd_export[tracer.name] = tracer.sinking_speed / \
+                    vs.dzt * tracer * tracer.flag
+
+                # Import is export from above scaled by the ratio of cell heights
+                npzd_import[tracer.name] = npx.empty_like(npzd_export[tracer.name])
+                npzd_import[tracer.name] = update(npzd_import[tracer.name], at[:,:,-1], 0)
+                npzd_import[tracer.name] = update(npzd_import[tracer.name], at[:,:,:-1],
+                                    npzd_export[tracer.name][:, :, 1:] *\
+                                    (vs.dzt[1:] / vs.dzt[:-1]))
+
+                # ensure we don't import in cells below bottom
+                npzd_import[tracer.name] = update_multiply(npzd_import[tracer.name], at[...], vs.maskT)
+                foodweb.deposits[tracer.name] = npzd_export[tracer.name]*vs.bottom_mask
+
+        # Gather all state updates
+        npzd_updates = [(rule.call(state), rule.boundary)
+                        for rule in foodweb.primary_rules]
+
+        # perform updates
+        for update, boundary in npzd_updates:
+            for key, value in update.items():
+                if isinstance(boundary, (tuple, slice)):
+                    foodweb.tracers[key].temp = update_add(
+                                        foodweb.tracers[key].temp, at[boundary],
+                                        value * vs.dt_bio
+                                        )
+                else:
+                    foodweb.tracers[key] = update_add(foodweb.tracers[key], at[...], 
+                                        value * vs.dt_bio * boundary
+                                        )
+
+        # Import and export between layers
+        # for tracer in vs.sinking_speeds:
+        for tracer in foodweb.tracers.values():
+            if hasattr(tracer, "sinking_speed"):
+                tracer.temp = update_add(tracer.temp, at[:,:,:],
+                (npzd_import[tracer.name]-npzd_export[tracer.name])*vs.dt_bio
+                )
+                
+        # Prepare temporary tracers for next bio iteration
+        for tracer in foodweb.tracers.values():
+            tracer.flag = update(tracer.flag, at[:,:,:], 
+                npx.logical_and(tracer.flag, (tracer.temp>vs.trcmin))
+                )
+            tracer.temp = update(tracer.temp, at[:,:,:], 
+                utilities.where(state, tracer.flag, tracer.temp, vs.trcmin)
+                )
+  
+
+    # Post processesing or smoothing rules
+    post_results = [(rule.call(state), rule.boundary)
+                    for rule in foodweb.post_rules]
+    post_modified = []  # we only want to reset values, which have actually changed for performance
+
+    for result, boundary in post_results:
+        for key, value in result.items():
+            foodweb.tracers[key].temp = update_add(foodweb.tracers[key].temp,
+                                        at[boundary],
+                                        value
+                                        )
+            post_modified.append(key)
+
+    # Reset before returning
+    # using set for unique modifications is faster than resetting all tracers
+    for tracer_name in set(post_modified):
+        tracer = foodweb.tracers[tracer_name]
+        tracer.flag = update(
+            tracer.flag,
+            at[:,:,:],
+            npx.logical_and(tracer.flag, (tracer.temp>vs.trcmin))
+        )
+        tracer.temp = update(
+            tracer.temp,
+            at[:,:,:],
+            utilities.where(state, tracer.flag, tracer.temp, vs.trcmin)
+        )
+
+    # Only return the difference from the current time step. Will be added to timestep taup1
+    return {tracer.name: tracer.temp - tracer.data[:, :, :, vs.tau]
+            for tracer in foodweb.tracers.values()}
+
+@veros_routine
+def PAR_distribution(state, foodweb):
+    '''
+    Essentially calculates the amount of light at photosynthetically 
+    active wavelengths in all grid boxes, using a 1D model of light 
+    attenuation.
+
+    Attentuation is due to water, ice and specific tracers 
+    (`light_attenuators`)
+    '''
+    vs = state.variables
+    settings = state.settings
+    light_attenuators = foodweb.light_attenuators
     # How much plankton is blocking light
-    #  -> We actually iterate over all light-attenuating tracers; the name plankton
+
    
-    #plankton_total = sum([plankton.data for plankton in light_attenuation_dict.keys()])\
-     #                   * vs.dzt
 
     # Integrated light_attenuating plankton - starting from top of layer going upwards
     # reverse cumulative sum because our top layer is the last.
     # Needs to be reversed again to reflect direction
     
     integrated_plankton = {}
-    for plankton in light_attenuators:
+    for i, plankton in enumerate(light_attenuators):
+        if i == 0:
+            light_extinction = npx.zeros_like(plankton.data)
         
         integrated_plankton[plankton.name] = npx.empty_like(plankton.data) 
         integrated_plankton[plankton.name][:,:,:-1] = plankton.data[:,:,1:]
         integrated_plankton[plankton.name][:,:,-1] = 0.0
     
-    plankton_total =  sum(plankton.data for plankton in light_attenuators)
-
-
     # incoming shortwave radiation at top of layer
-    light_extinction = npx.empty_like(plankton_total)
     for plankton in light_attenuators:
         light_extinction = update_add(light_extinction, at[...],
             -plankton.light_attenuation*\
@@ -132,140 +276,7 @@ def biogeochemistry(state):
         # Methods for internal use may need an update
         if hasattr(tracer, "update_internal"):
             tracer.update_internal(state)
-
-    # bio loop
-    for _ in range(nbio):
-
-        # Plankton is recycled, dying and growing
-        # pre compute amounts for use in rules
-        # for plankton in vs.plankton_types:
-        for tracer in foodweb.tracers.values():
-
-            # Nutrient-limiting growth - if no limit, growth is determined by avej
-            u = 1
-
-            # limit maximum growth, usually by nutrient deficiency
-            # and calculate primary production from that
-            if hasattr(tracer, "potential_growth"):
-                # NOTE jmax and avej are NOT updated within bio loop
-                for growth_limiting_function in settings.limiting_functions[tracer.name]:
-                    u = npx.minimum(u, growth_limiting_function(state, foodweb.tracers))
-
-                tracer.net_primary_production = npx.minimum(avej[tracer.name], 
-                                            u*jmax[tracer.name]) * tracer.data
-            
-            if hasattr(tracer, "grazing"):
-                tracer.thetaZ = tracer.reset_thetaZ(state)
-
-            #We want to shift everything to rules
-            #Iterate over all rules in foodweb. Evaluate flags of tracer nodes. If flags
-            #of all concerned tracers is not above minimum, kill the interaction.
-
-            for rule in foodweb.rules:
-                if  isinstance(rule.sink, str):
-                    sinks = [rule.sink]
-                elif isinstance(rule.sink, list):
-                    sinks = rule.sink
-                if isinstance(rule.source, str):
-                    sources = [rule.source]
-                elif isinstance(rule.source, list):
-                    sources = [rule.source]
-                rule.flag = vs.maskT
-                for node in sources+sinks:
-                    rule.flag = update_multiply(rule.flag, at[...], foodweb.flags[node])
-
-                
-
-            #Remove all calls of things like net_primary_production, recycling, mortality,
-            #grazing to rules. Keep all bgc interactions there rather than cluttering up
-            #this space.
-
-            # Calculate concentration leaving cell and entering from above
-            if hasattr(tracer, "sinking_speed"):
-                # Concentration of exported material is calculated as fraction
-                # of total concentration[:, :, ::-1], axis=2) which would have fallen through the bottom
-                # of the cell (speed / vs.dzt * vs.dtbio)
-                # vs.dtbio is accounted for later
-                npzd_export = {}; npzd_import = {}
-                npzd_export[tracer.name] = tracer.sinking_speed / vs.dzt * tracer * tracer.flag
-
-                # Import is export from above scaled by the ratio of cell heights
-                npzd_import[tracer.name] = npx.empty_like(npzd_export[tracer.name])
-                npzd_import[tracer.name] = update(npzd_import[tracer.name], at[:,:,-1], 0)
-                npzd_import[tracer.name] = update(npzd_import[tracer.name], at[:,:,:-1],
-                                    npzd_export[tracer.name][:, :, 1:] *\
-                                    (vs.dzt[1:] / vs.dzt[:-1]))
-
-                # ensure we don't import in cells below bottom
-                npzd_import[tracer.name] = update_multiply(npzd_import[tracer.name], at[...], vs.maskT)
-                foodweb.deposits[tracer.name] = npzd_export[tracer.name]*vs.bottom_mask
-
-        # Gather all state updates
-        npzd_updates = [(rule.call(state), rule.boundary)
-                        for rule in settings.npzd_rules]
-
-        # perform updates
-        for update, boundary in npzd_updates:
-            for key, value in update.items():
-                if isinstance(boundary, (tuple, slice)):
-                    foodweb.tracers[key].temp = update_add(
-                                        foodweb.tracers[key].temp, at[boundary],
-                                        value * vs.dt_bio
-                                        )
-                else:
-                    foodweb.tracers[key] = update_add(foodweb.tracers[key], at[...], 
-                                        value * vs.dt_bio * boundary
-                                        )
-
-        # Import and export between layers
-        # for tracer in vs.sinking_speeds:
-        for tracer in foodweb.tracers.values():
-            if hasattr(tracer, "sinking_speed"):
-                tracer.temp = update_add(tracer.temp, at[:,:,:],
-                (npzd_import[tracer.name]-npzd_export[tracer.name])*vs.dt_bio
-                )
-                
-        # Prepare temporary tracers for next bio iteration
-        for tracer in foodweb.tracers.values():
-            tracer.flag = update(tracer.flag, at[:,:,:], 
-                npx.logical_and(tracer.flag, (tracer.temp>vs.trcmin))
-                )
-            tracer.temp = update(tracer.temp, at[:,:,:], 
-                utilities.where(state, tracer.flag, tracer.temp, vs.trcmin)
-                )
-  
-
-    # Post processesing or smoothing rules
-    post_results = [(rule.call(state), rule.boundary)
-                    for rule in settings.npzd_post_rules]
-    post_modified = []  # we only want to reset values, which have actually changed for performance
-
-    for result, boundary in post_results:
-        for key, value in result.items():
-            foodweb.tracers[key].temp = update_add(foodweb.tracers[key].temp,
-                                        at[boundary],
-                                        value
-                                        )
-            post_modified.append(key)
-
-    # Reset before returning
-    # using set for unique modifications is faster than resetting all tracers
-    for tracer_name in set(post_modified):
-        tracer = foodweb.tracers[tracer_name]
-        tracer.flag = update(
-            tracer.flag,
-            at[:,:,:],
-            npx.logical_and(tracer.flag, (tracer.temp>vs.trcmin))
-        )
-        tracer.temp = update(
-            tracer.temp,
-            at[:,:,:],
-            utilities.where(state, tracer.flag, tracer.temp, vs.trcmin)
-        )
-
-    # Only return the difference from the current time step. Will be added to timestep taup1
-    return {tracer.name: tracer.temp - tracer.data[:, :, :, vs.tau]
-            for tracer in foodweb.tracers.values()}
+    return (jmax, avej)
 
 
 @veros_routine
@@ -281,18 +292,19 @@ def npzd(state):
     """
     vs = state.variables
     settings = state.settings
-    foodweb = settings.foodweb
-    
-    
-    if not settings.enable_npzd:
-        return
+
 
     # TODO: Refactor transportation code to be defined only once and also used by thermodynamics
     # TODO: Dissipation on W-grid if necessary
     
     # common temperature factor determined according to b ** (cT)
     vs.bct = settings.bbio ** (settings.cbio * vs.temp[:, :, :, vs.tau])
-    #npzd_changes = biogeochemistry(state)
+
+    from .foodweb import get_foodweb
+    foodweb =  get_foodweb(state)
+
+    
+    npzd_changes = biogeochemistry(state, foodweb)
 
     """
     For vertical mixing
@@ -312,6 +324,8 @@ def npzd(state):
     b_tri[:, :, 1:] = 1 + (delta[:, :, 1:] + delta[:, :, :-1]) / vs.dzt[npx.newaxis, npx.newaxis, 1:]
     b_tri_edge = 1 + delta / vs.dzt[npx.newaxis, npx.newaxis, :]
     c_tri[:, :, :-1] = -delta[:, :, :-1] / vs.dzt[npx.newaxis, npx.newaxis, :-1]
+    
+
 
     for tracer in foodweb.transported_tracers:
         tracer_data = tracer.data
@@ -320,14 +334,14 @@ def npzd(state):
         """
         Advection of tracers
         """
-        settings.npzd_advection_derivatives[tr][:, :, :, vs.tau] = thermodynamics.advect_tracer(
+        foodweb.npzd_advection_derivatives[tr][:, :, :, vs.tau] = thermodynamics.advect_tracer(
                                                                   state, tracer_data[:, :, :, vs.tau])
                                      
 
         # Adam-Bashforth timestepping
         tracer_data[:, :, :, vs.taup1] = tracer_data[:, :, :, vs.tau] + settings.dt_tracer \
-            * ((1.5 + settings.AB_eps) * settings.npzd_advection_derivatives[tr][:, :, :, vs.tau]
-               - (0.5 + settings.AB_eps) * settings.npzd_advection_derivatives[tr][:, :, :, vs.taum1])\
+            * ((1.5 + settings.AB_eps) * foodweb.npzd_advection_derivatives[tr][:, :, :, vs.tau]
+               - (0.5 + settings.AB_eps) * foodweb.npzd_advection_derivatives[tr][:, :, :, vs.taum1])\
             * vs.maskT
 
         """
@@ -394,12 +408,12 @@ def npzd(state):
 
     # update by biogeochemical changes
 
-    #for tracer, change in npzd_changes.items():
-    #    vs.npzd_tracers[tracer][:, :, :, vs.taup1] += change
+    for tracer, change in npzd_changes.items():
+        vs.npzd_tracers[tracer][:, :, :, vs.taup1] += change
 
     # prepare next timestep with minimum tracer values
-    for tracer in settings.npzd_tracers.values():
+    for tracer in foodweb.tracers.values():
         tracer.data[:, :, :, vs.taup1] = npx.maximum(tracer[:, :, :, vs.taup1], settings.trcmin * vs.maskT)
 
-    for tracer in vs.npzd_tracers.values():
+    for tracer in foodweb.tracers.values():
         utilities.enforce_boundaries(tracer.data)

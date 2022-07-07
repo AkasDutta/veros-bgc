@@ -5,27 +5,16 @@ SETTINGS = {
     "enable_npzd": Setting(False, bool, ""),
     "enable_carbon": Setting(False, bool, ""),
     "_bgc_bluprint": Setting((), tuple, "Tuple of tracers and rules in setup"),
-    "foodweb": Setting(FoodWeb([],[]), FoodWeb, "Graph representation with tracers as nodes, rules as edges"),
+    #"foodweb": Setting(FoodWeb([],[]), FoodWeb, "Graph representation with tracers as nodes, rules as edges"),
 
     # I don't like keeping these in settings, but I can't make them in variables
     # maybe keep selected rules
-    "recycled": Setting({}, dict, "Amount of recycled material [mmol/m^3] for NPZD tracers"),
-    "mortality": Setting({}, dict, "Amount of dead plankton [mmol/m^3] by species"),
-    "net_primary_production": Setting({}, dict, "Primary production for each producing plankton species"),
-    "plankton_growth_functions": Setting({}, dict, "Collection of functions calculating growth for plankton by species"),
-    "limiting_functions": Setting({}, dict, "Collection of functions calculating limits to growth for plankton by species"),
-    "npzd_tracers": Setting({}, dict, "Dictionary whose values point to veros variables for npzd tracers"),
-    "npzd_rules": Setting([], list, "List of active rules in primary loop of BGC"),
-    "npzd_pre_rules": Setting([], list, "List of rules to executed in the pre loop of BGC"),
-    "npzd_post_rules": Setting([], list, "Rules to be executed after primary bio loop"),
-    "npzd_available_rules": Setting({}, dict, "Every rule created is stored here, can be individual rules or collections of rules"),
-    "npzd_selected_rule_names": Setting([], list, "name of selected rules"),
-    "npzd_export": Setting({}, dict, "Exported material from npzd tracers by sinking"),
-    "npzd_import": Setting({}, dict, "Imported material from npzd tracers from layer above. Takes same value as npzd_export scaled by level differences. Sea surface is 0"),
-    "zprefs": Setting({}, dict, "Preference for zooplankton to graze on named tracers"),
-    "npzd_transported_tracers": Setting([], list, "List of NPZD tracers which are transported"),
-    "npzd_advection_derivatives": Setting({}, dict, "Stores derivates of advection term for tracers"),
-    "temporary_tracers": Setting({}, dict, "Temporary copy of npzd_tracers for biogeochemistry loop"),
+    #"recycled": Setting({}, dict, "Amount of recycled material [mmol/m^3] for NPZD tracers"),
+    #"mortality": Setting({}, dict, "Amount of dead plankton [mmol/m^3] by species"),
+    #"net_primary_production": Setting({}, dict, "Primary production for each producing plankton species"),
+    #"plankton_growth_functions": Setting({}, dict, "Collection of functions calculating growth for plankton by species"),
+    #"limiting_functions": Setting({}, dict, "Collection of functions calculating limits to growth for plankton by species"),
+    #"npzd_tracers": Setting({}, dict, "Dictionary whose values point to veros variables for npzd tracers"),
 
 
 
