@@ -1,5 +1,5 @@
 from veros.settings import Setting
-from foodweb import FoodWeb
+
 
 SETTINGS = {
     "enable_npzd": Setting(False, bool, ""),
