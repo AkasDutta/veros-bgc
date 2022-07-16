@@ -1,0 +1,10 @@
+#Tracers.yml
+#Each document corresponds to a tracer
+
+---
+#Phosphate
+
+name: po4
+class: NPZD_tracer
+description: Dissolved phosphate concentration
+...

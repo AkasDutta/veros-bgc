@@ -25,12 +25,13 @@ Operating System :: MacOS
 """
 
 INSTALL_REQUIRES = [
-    'veros>=0.2.1,<1.3.0',
+    'veros>1.3.0',
     'graphviz'
 ]
 
 PACKAGE_DATA = [
-    'setup/*/assets.yml', 'setup/*/npzd.yml',
+    'setup/*/assets.yml', 'setup/*/npzd_rules.yml',
+    'setup/*/npzd_tracers.yml',
     'setup/*/*.npy', 'setup/*/*.png'
 ]
 

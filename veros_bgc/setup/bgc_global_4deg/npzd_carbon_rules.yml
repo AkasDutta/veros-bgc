@@ -1,0 +1,245 @@
+---
+#'''
+# READ CAREFULLY
+#The following is a file containing rules for the npzd/carbon cycle model using 
+#the Veros-bgc plugin. A rule is a biological/chemical interaction,
+#analogous to an edge in a food web diagram. 
+
+#Each rule is encoded by a function that must appear in 
+#RuleTemplates in `veros_bgc.core.npzd_rules.py`. The function argument 
+#should be its name as a string. However, the arguments of the function 
+#will be tracers in the model. Any such value, to be interpreted as a 
+#variable name, not a string, should be prefixed with a "$". This is not necessary
+#for function, source and sink, as these fields are supposed to store string keys
+#pointing to the actual names. They may be needed for criteria and arguments.
+
+#Occasionally, a source or sink will not be a key pointing to any tracer in the model.
+#Such a "missing" source/sink should be named with the "~" prefix, so that a node corresponding
+#to no tracer may be illustrated in the foodweb diagram. These fields cannot be left empty.
+
+#'''
+
+criteria:
+    #Each of the elements below should be True for the rules to be registered
+  - $settings.enable_npzd
+  - $settings.enable_carbon
+
+npzd_carbon_phytoplankton_grazing_cycle:
+    function: grazing_cycle
+    arguments:
+        prey: $phytoplankton
+        grazer: $zooplankton
+        remains: 
+          #order matters
+          - $detritus
+          - $caco3
+        nutrients: 
+            - $po4
+            - $dic
+        ratios:
+            - $settings.redfield_ratio_PN
+            - $settings.redfield_ratio_CN
+    source: phytoplankton
+    sink: 
+        - zooplankton
+        - detritus
+        - caco3
+        - po4
+        - dic
+    label: Grazing
+    
+
+npzd_carbon_phytoplankton_mortality:
+    function: mortality
+    arguments:
+        plankton: $phytoplankton
+        remains:
+        #This order matters: $detritus BEFORE $calcite
+        - $detritus
+        - $caco3
+    source: phytoplankton
+    sink: detritus
+    label: Mortality
+    
+npzd_carbon_zooplankton_grazing:
+    function: grazing_cycle
+    arguments:
+        prey: $zooplankton
+        grazer: $zooplankton
+        remains: $detritus
+        nutrients:
+            - $po4
+            - $dic
+        ratios:
+            - $settings.redfield_ratio_PN
+            - $settings.redfield_ratio_CN
+    source: zooplankton
+    sink: 
+        - zooplankton
+        - detritus
+        - po4
+        - dic
+    label: Grazing
+    
+
+npzd_basic_zooplankton_mortality:
+    function: mortality
+    arguments:
+        plankton: $zooplankton
+        remains: $detritus
+    source: zooplankton
+    sink: detritus
+    label: Mortality
+    
+
+npzd_carbon_detritus_grazing_cycle:
+    function: grazing_cycle
+    arguments:
+        prey: $detritus
+        grazer: $zooplankton
+        remains: $detritus
+        nutrients:
+            - $po4
+            - $dic
+        ratios:
+            - $settings.redfield_ratio_PN
+            - $settings.redfield_ratio_CN
+    source: detritus
+    sink: 
+        - zooplankton
+        - detritus
+        - po4
+        - dic
+    label: Grazing
+    
+
+npzd_basic_detritus_remineralization:
+    function: recycling
+    arguments:
+        plankton: $detritus
+        nutrient: $po4
+        ratio: $settings.redfield_ratio_PN
+    source: detritus
+    sink: po4
+    label: Remineralization
+    
+
+npzd_basic_detritus_bottom_remineralization:
+    function: bottom_remineralization
+    arguments:
+        source: $detritus
+        sink: $po4
+        scale: $settings.redfield_ratio_PN
+    source: po4
+    sink: detritus
+    boundry: BOTTOM
+    label: Bottom remineralization
+    
+npzd_carbon_flux:
+    function: co2_surface_flux
+    arguments:
+        co2: $co2
+        dic: $dic
+    source: ~Atmosphere
+    sink:  DIC
+    boundary: SURFACE
+    label: Atmosphere exchange
+    group: PRE
+
+npzd_carbon_primary_production_dic:
+    function: primary_production
+    arguments:
+        nutrient: 
+            - $po4
+            - $dic
+        plankton: $phytoplankton
+        ratio:
+            - $settings.redfield_ratio_PN
+            - $settings.redfield_ratio_CN
+    source: 
+      - po4
+      - dic
+    sink: phytoplankton
+    label: Primary Production
+
+npzd_carbon_phytoplankton_fast_recycling:
+    function: recycling
+    arguments:
+        plankton: $phytoplankton
+        nutrients: 
+          - $po4
+          - $dic
+       #  - $no3 -  this is not a nitrogen cycle model, so commented out
+        ratio:
+          - $settings.redfield_ratio_PN
+          - $settings.redfield_ratio_CN
+      #   - 1 - no ratio needed; already in terms of N
+    source: phytoplankton
+    sink: 
+      - po4
+      - DIC
+    label: Fast recyling
+
+
+
+npzd_carbon_calcite_production:
+  function: carbon_calcite_production
+  arguments:
+    dic: $dic
+    alk: $alk
+    calcite: $caco3
+  source:
+    - dic
+    - alk
+  sink:
+    - caco3
+  label: Production of calcite
+
+npzd_carbon_detritus_bottom_remineralization:
+    function: bottom_remineralization
+    arguments:
+        source: $detritus
+        sink: $dic
+        scale: $settings.redfield_ratio_CN
+    source: dic
+    sink: detritus
+    boundry: BOTTOM
+    label: Bottom remineralization
+
+npzd_carbon_dic_alk:
+  function: dic_alk_scale
+  arguments:
+    DIC: $dic
+    alkalinity: $alk
+  source: ~Equilibrium with DIC
+  sink: alk
+  label: Redistribution of alkalinity
+  group: POST
+
+npzd_carbon_redistribution_calcite:
+  function: post_redistribute_calcite
+  arguments:
+    calcite: $caco3
+    tracers:
+      - $dic
+      - $alk
+    ratios:
+      - 1
+      - 2
+  source: ~calcite_redistribution
+  sink:
+    - dic
+    - alk
+  label: Redistribution of calcite
+  group: POST
+
+#The rule above implicitly turned all remaining calcite to dic and alk
+#The rule below removed all the calcite
+pre_reset_calcite:
+  function: pre_reset_calcite
+  arguments:
+    calcite: $caco3
+  source: caco3
+  sink: ~calcite_redistribution
+  label: Calcite reset
+  group: PRE

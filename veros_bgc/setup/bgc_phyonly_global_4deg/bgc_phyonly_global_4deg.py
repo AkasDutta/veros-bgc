@@ -7,7 +7,7 @@ from yaml.loader import SafeLoader
 
 
 import veros.tools
-from veros import VerosSetup, logger, distributed
+from veros import VerosSetup,  logger, distributed
 from veros.variables import Variable
 from veros.core.operators import numpy as npx, update, at, update_add, update_multiply
 from veros import veros_routine, veros_kernel, KernelOutput
@@ -22,8 +22,6 @@ DATA_FILES = veros.tools.get_assets(
     os.path.join(BASE_PATH, 'assets.yml')
 )
 
-#To be able to register rules to the foodweb,
-#we need to be able to interpret surfaces and bottom boundaries in terms of the grid
 
 class GlobalFourDegreeBGC(VerosSetup):
     """Global 4 degree model with 15 vertical levels and biogeochemistry.
@@ -53,14 +51,14 @@ class GlobalFourDegreeBGC(VerosSetup):
         settings.y_origin = -76.0
         
         settings.trcmin = 0 #Minimum concentration of a tracer
-        settings.enable_npzd = True
-        settings.enable_carbon = True
+        settings.enable_npzd = False
+        settings.enable_carbon = False
 
-        with open(os.path.join(BASE_PATH, "npzd_carbon_tracers.yml")) as f:
+        with open(os.path.join(BASE_PATH, "npzd_physics_tracers.yml")) as f:
             tracers = list(yaml.load_all(f, Loader=SafeLoader))
-        with open(os.path.join(BASE_PATH, "npzd_carbon_rules.yml")) as f:
-            rules = yaml.load(f, Loader=SafeLoader)
-        settings._bgc_blueprint = (tracers, rules)
+        #with open(os.path.join(BASE_PATH, "npzd_physics.yml")) as f:
+        #    rules = yaml.load(f, Loader=SafeLoader)
+        settings._bgc_blueprint = (tracers, None)
 
         settings.bbio = 1.038
         settings.cbio = 1.0
@@ -145,10 +143,10 @@ class GlobalFourDegreeBGC(VerosSetup):
         vs.dxt = 4.0*npx.ones_like(vs.dxt)
         vs.dyt = 4.0*npx.ones_like(vs.dyt)
 
-        idx_global, _ = distributed.get_chunk_slices(vs, ('xt', 'yt', 'zt')) #hm
+        #idx_global, _ = distributed.get_chunk_slices(vs, ('xt', 'yt', 'zt')) #hm
 
-        with h5netcdf.File(DATA_FILES['corev2'], 'r') as infile:
-            vs.swr_initial = infile.variables['SWDN_MOD'][idx_global[::-1]].T #Might move this down
+        #with h5netcdf.File(DATA_FILES['corev2'], 'r') as infile:
+        #    vs.swr_initial = infile.variables['SWDN_MOD'][idx_global[::-1]].T #Might move this down
 
     @veros_routine
     def set_coriolis(self, state):
@@ -345,19 +343,8 @@ class GlobalFourDegreeBGC(VerosSetup):
         state.diagnostics["energy"].sampling_frequency = 86400
         
         snapshot_vars = [
-            "phytoplankton",
-            "zooplankton",
-            "detritus",
             "po4",
-            "dic",
-            "alkalinity"
-            "cflux",
-            "windspeed",
-            "hSWS",
-            "pCO2",
-            "dpCO2",
-            "co2star",
-            "dco2star",
+            "windspeed"
         ]
                                      
         for var in snapshot_vars:
@@ -365,13 +352,8 @@ class GlobalFourDegreeBGC(VerosSetup):
                                      
 
         average_vars = [
-            "phytoplankton",
             "po4",
-            "zooplankton",
-            "detritus",
             "wind_speed",
-            "dic",
-            "alkalinity",
             "temp",
             "salt",
             "u",
@@ -380,12 +362,7 @@ class GlobalFourDegreeBGC(VerosSetup):
             "surface_taux",
             "kappaH",
             "psi",
-            "rho",
-            "pCO2",
-            "dpCO2",
-            "dco2star",
-            "cflux",
-            "atmospheric_co2"
+            "rho"
         ]
                                      
         state.diagnostics["averages"].output_variables = average_vars
@@ -394,27 +371,6 @@ class GlobalFourDegreeBGC(VerosSetup):
 
         #state.diagnostics["npzd"].output_frequency = 10 * 86400
         #state.diagnostics["npzd"].save_graph = False
-
-
-                    
-
-
-
-
-
-
-
-  
-
-
-                
-
-
-            
-
-            
-
-
 
     @veros_routine
     def after_timestep(self, state):
