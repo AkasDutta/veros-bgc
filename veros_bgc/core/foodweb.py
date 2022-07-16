@@ -7,9 +7,27 @@ from collections import namedtuple
 
 from .npzd_tracers import TracerClasses
 from .npzd_rules import RuleTemplates, Rule
+import functools
+
+def memoize(func):
+    '''
+    Stores the result of func to avoid rework if func is invoked again
+
+    Warning: will provide the same result even if the input to func changes
+    '''
+    func.cache = []
+
+    @functools.wraps(func)
+    def inner(*args):
+        if func.cache != []:
+            func.cache = func(*args)
+
+        return func.cache[args]
+
+    return inner
 
 @veros_routine
-def ParseTracers(state, dtr_speed):
+def parse_tracers(state, dtr_speed):
     vs = state.variables
     settings = state.settings
 
@@ -54,7 +72,7 @@ def ParseTracers(state, dtr_speed):
     #All tracers have been initialised properly
     return ModelTracers
 
-def PrefixParser(arg):
+def prefix_parser(arg):
     ''' Maps strings beginning with "$" to variables bearing those names. Useful when loading
     data from a .yaml file '''
     if isinstance(arg, str):
@@ -65,12 +83,12 @@ def PrefixParser(arg):
     elif isinstance(arg, list):
         parsed = []
         for element in arg:
-            parsed.append(PrefixParser(element))
+            parsed.append(prefix_parser(element))
     
     elif isinstance(arg, dict):
         parsed = {}
         for key in arg.keys():
-            parsed_value = PrefixParser(arg[key])
+            parsed_value = prefix_parser(arg[key])
             parsed[key] = parsed_value
 
     
@@ -78,8 +96,9 @@ def PrefixParser(arg):
         parsed = arg
     
     return parsed
+
 @veros_routine
-def ParseRules(state):
+def parse_rules(state):
     vs = state.variables
     settings = state.settings
 
@@ -88,7 +107,7 @@ def ParseRules(state):
 
     for key in rules.keys():
         if key == "criteria":
-            criteria = PrefixParser(rules[key])
+            criteria = prefix_parser(rules[key])
             for criterion in criteria:
                 if criterion is False:
                     raise ValueError(f"The rules used in setup require that {criterion} be\
@@ -100,7 +119,7 @@ def ParseRules(state):
             temp_rule = {}
 
             for att in rule.keys():
-                parsed_att = PrefixParser(rule[att])
+                parsed_att = prefix_parser(rule[att])
                 temp_rule[att] = parsed_att
 
             ModelRules[key] = temp_rule
@@ -108,10 +127,11 @@ def ParseRules(state):
         else:
             raise ValueError(f"{key} is neither a rule nor the criteria.")
         
-        ModelRules = RuleConstructor(state, ModelRules)
+        ModelRules = rule_constructor(state, ModelRules)
         return ModelRules
+
 @veros_routine
-def RuleConstructor(state, InputRules):
+def rule_constructor(state, InputRules):
 
     OutputRules = {}
 
@@ -148,23 +168,20 @@ def RuleConstructor(state, InputRules):
                             rule["boundary"], 
                             rule["group"]
                         )
-        return OutputRules
-        
+        return OutputRules        
 
+@memoize
 @veros_routine
 def set_foodweb(state, dtr_speed):
 
     vs = state.variables
     settings = state.settings
 
-    if not settings.enable_npzd:
-        return
-
     foodweb = nx.MultiDiGraph()
 
-    ModelTracers = ParseTracers(state, dtr_speed)
+    ModelTracers = parse_tracers(state, dtr_speed)
 
-    ModelRules = ParseRules(state)
+    ModelRules = parse_rules(state)
 
 
     #Created appropriated tracer objects using parameters . yaml file
@@ -241,7 +258,7 @@ def phosphate_limitation_phytoplankton(state, tracers):
     return general_nutrient_limitation(tracers["po4"], settings.saturation_constant_N *\
          settings.redfield_ratio_PN)
 
-
+    
 @veros_routine
 def get_foodweb(state):
         vs = state.variables
