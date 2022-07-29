@@ -22,7 +22,7 @@ def memoize(func):
     @functools.wraps(func)
     def inner(*args):
         if args not in func.cache.keys():
-            func.cache = func(*args)
+            func.cache[args] = func(*args)
 
         return func.cache[args]
 
