@@ -13,6 +13,7 @@ name: detritus
 class: Recyclable_tracer
 sinking_speed: #Left empty as it is computed from grid properties, not explicitly set
 recyling_rate: 0.0000010416  #0.09 / 86400 #[1/sec]
+unit: "mmol/m^3?"
 ...
 
 ---
@@ -29,7 +30,7 @@ growth_parameter: 0.00000266203703 #0.23 / 86400  #[1/sec]
 recycling_rate:   0.00000028935185 #0.025 / 86400 #[1/sec]
 mortality_rate:   0.00000040509259 #0.035 / 86400 #[1/mmol P/sec]
 calcite_producing: True
-
+unit: "mmol/m^3?"
 ...
 
 ---
@@ -47,11 +48,12 @@ grazing_saturation_constant:  0.15             #Half saturation constant for Z g
 assimilation_efficiency:      0.5              #Range: [0,1]
 growth_efficiency:            0.60             #Range: [0,1]
 grazing_preferences: #Rescaled in `Zooplankton.graxing()`
-  detritus: 1
-  phytoplankton: 0
-  zooplankon:    1
+  detritus: 1.0
+  phytoplankton: 0.0
+  zooplankon:    1.0
 mortality_rate:               0.00000069444444 #0.06 / 86400
 #max_growth_temperature:
+unit: "mmol/m^3?"
 ...
 
 ---
@@ -60,6 +62,7 @@ mortality_rate:               0.00000069444444 #0.06 / 86400
 name: po4
 class: NPZD_tracer
 description: Dissolved phosphate concentration
+unit: "mmol/m^3?"
 ...
 
 ---
@@ -67,6 +70,7 @@ description: Dissolved phosphate concentration
 name: dic
 class: NPZD_tracer
 description: Dissolved inorganic carbon
+unit: "mmol/m^3?"
 ...
 
 ---
@@ -74,6 +78,7 @@ description: Dissolved inorganic carbon
 name: alk
 class: NPZD_tracer
 description: Alkalinity
+unit: "mmol/m^3?"
 ...
 
 ---
@@ -81,3 +86,4 @@ name: caco3
 class: Calcite
 transport: False
 description: Calcite; not explicitly tracked, but modelled using a redistribution rule
+unit: "mmol/m^3?"

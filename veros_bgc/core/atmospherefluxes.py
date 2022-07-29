@@ -6,6 +6,7 @@ from veros import veros_method, runtime_settings as rs
 from veros.core import utilities
 from veros.core.operators import numpy as npx, update, at, update_add, update_multiply
 
+
 @veros_method
 def carbon_flux(state):
     """Calculates flux of CO2 over the ocean-atmosphere boundary
@@ -31,34 +32,53 @@ def carbon_flux(state):
     vs = state.variables
     settings = state.settings
 
-    icemask = npx.logical_and(vs.temp[:, :, -1, vs.tau] * vs.maskT[:, :, -1] < -1.8,
-            vs.forc_temp_surface < 0.0)
+    icemask = npx.logical_and(
+        vs.temp[:, :, -1, vs.tau] * vs.maskT[:, :, -1] < -1.8,
+        vs.forc_temp_surface < 0.0,
+    )
     ao = npx.logical_not(icemask)
 
-    atmospheric_pressure = 1  # atm  NOTE: We don't have an atmosphere yet, hence constant pressure
+    atmospheric_pressure = (
+        1  # atm  NOTE: We don't have an atmosphere yet, hence constant pressure
+    )
 
     # TODO get actual wind speed rather than deriving from wind stress
-    wind_speed = npx.sqrt(npx.abs(vs.surface_taux / settings.rho_0) + npx.abs(vs.surface_tauy / settings.rho_0)) * 500
+    wind_speed = (
+        npx.sqrt(
+            npx.abs(vs.surface_taux / settings.rho_0)
+            + npx.abs(vs.surface_tauy / settings.rho_0)
+        )
+        * 500
+    )
     vs.wind_speed = wind_speed
-
 
     # xconv is constant to convert piston_vel from cm/hr -> cm/s
     # here it is 100.*a*xconv (100 => m to cm, a=0.337, xconv=1/3.6e+05)
     xconv = 0.337 / 3.6e5
-    xconv *= 0.75  # NOTE: This seems like an approximation I don't know where they got it
+    xconv *= (
+        0.75  # NOTE: This seems like an approximation I don't know where they got it
+    )
 
-    vs.dco2star = co2calc_SWS(state, vs.temp[:, :, -1, vs.tau],  # [degree C]
-                              vs.salt[:, :, -1, vs.tau],  # [g/kg]
-                              vs.dic[:, :, -1, vs.tau] * 1e-3,  # [mmol -> mol]
-                              vs.alkalinity[:, :, -1, vs.tau] * 1e-3,  # [mmol -> mol]
-                              vs.atmospheric_co2,  # [ppmv]
-                              atmospheric_pressure)  # atm
+    vs.dco2star = co2calc_SWS(
+        state,
+        vs.temp[:, :, -1, vs.tau],  # [degree C]
+        vs.salt[:, :, -1, vs.tau],  # [g/kg]
+        vs.dic[:, :, -1, vs.tau] * 1e-3,  # [mmol -> mol]
+        vs.alkalinity[:, :, -1, vs.tau] * 1e-3,  # [mmol -> mol]
+        vs.atmospheric_co2,  # [ppmv]
+        atmospheric_pressure,
+    )  # atm
 
     # Schmidt number for CO2
     # Wanninkhof, 1992, table A
-    scco2 = 2073.1 - 125.62 * vs.temp[:, :, -1, vs.tau] + 3.6276 * vs.temp[:, :, -1, vs.tau] ** 2 - 0.043219 * vs.temp[:, :, -1, vs.tau] ** 3
+    scco2 = (
+        2073.1
+        - 125.62 * vs.temp[:, :, -1, vs.tau]
+        + 3.6276 * vs.temp[:, :, -1, vs.tau] ** 2
+        - 0.043219 * vs.temp[:, :, -1, vs.tau] ** 3
+    )
 
-    piston_vel = ao * xconv * (wind_speed) ** 2 * ((scco2/660.0)**(-0.5))
+    piston_vel = ao * xconv * (wind_speed) ** 2 * ((scco2 / 660.0) ** (-0.5))
     # NOTE: According to https://www.soest.hawaii.edu/oceanography/courses/OCN623/Spring%202015/Gas_Exchange_2015_one-lecture1.pdf there are 3 regimes we are looking at the wavy surface
     # NOTE: https://aslopubs.onlinelibrary.wiley.com/doi/pdf/10.4319/lom.2014.12.351 uses the correct form for scco2
     # Sweeney et al. 2007
@@ -73,42 +93,44 @@ def carbon_flux(state):
 
 
 @veros_method
-def co2calc_SWS(state, temperature, salinity, dic_in, ta_in, co2_in, atmospheric_pressure):
-    """ Calculate delta co2*
+def co2calc_SWS(
+    state, temperature, salinity, dic_in, ta_in, co2_in, atmospheric_pressure
+):
+    """Calculate delta co2*
 
-        Calculate delta co2* from total alkalinty and total CO2 at temperature, salinity and atmosphere total pressure
-        This function needs a better name
+    Calculate delta co2* from total alkalinty and total CO2 at temperature, salinity and atmosphere total pressure
+    This function needs a better name
 
-        Parameters
-        ----------
+    Parameters
+    ----------
 
-        temperature
-            sea surface temperature
+    temperature
+        sea surface temperature
 
-        salinity
-            sea surface salinity
+    salinity
+        sea surface salinity
 
-        dic_in
-            DIC in surface layer in units [mol/m^3]
+    dic_in
+        DIC in surface layer in units [mol/m^3]
 
-        ta_in
-            Total alkalinity in surface layer in units [mol/m^3]
+    ta_in
+        Total alkalinity in surface layer in units [mol/m^3]
 
-        co2_in
-            atmospheric co2
+    co2_in
+        atmospheric co2
 
-        atmospheric_pressure
-            atmospheric pressure in [atm]
+    atmospheric_pressure
+        atmospheric pressure in [atm]
 
-        Note
-        ----
-        It is assumed, that total Si and P are constant.
-        Several other element concentration are approximated from temperature and salinity
+    Note
+    ----
+    It is assumed, that total Si and P are constant.
+    Several other element concentration are approximated from temperature and salinity
 
-        Returns
-        -------
+    Returns
+    -------
 
-        $\delta CO_2\star$
+    $\delta CO_2\star$
     """
     vs = state.variables
     settings = state.settings
@@ -123,18 +145,18 @@ def co2calc_SWS(state, temperature, salinity, dic_in, ta_in, co2_in, atmospheric
     # Note: mol/kg are actually what the body of this routine uses for calculations
 
     permil = 1.0 / 1024.5
-    pt = update_multiply(pt_in, at[...],  permil)  # total P
-    sit = update_multiply(sit_in, at[...],  permil)# total Si
-    ta = update_multiply(ta_in, at[...],  permil) # total alkalinity
-    dic = update_multiply(dic_in, at[...],  permil)
+    pt = update_multiply(pt_in, at[...], permil)  # total P
+    sit = update_multiply(sit_in, at[...], permil)  # total Si
+    ta = update_multiply(ta_in, at[...], permil)  # total alkalinity
+    dic = update_multiply(dic_in, at[...], permil)
 
     # convert from uatm to atm, but it's in ppmv
     permeg = 1e-6
     co2 = update_multiply(co2_in, at[...], permeg)
 
-    scl = update_multiply(salinity, at[...],  1/1.80655)  # convenience parameter
+    scl = update_multiply(salinity, at[...], 1 / 1.80655)  # convenience parameter
     _is = update_multiply(salinity, at[...], 19.924 / (1000.0 - 1.005 * salinity))
-            # ionic _strength
+    # ionic _strength
 
     # Concentrations for borate, sulfate, and flouride
     bt = update_multiply(scl, at[...], 0.000232 / 10.811)  # Uppstrom (1974)
@@ -142,95 +164,183 @@ def co2calc_SWS(state, temperature, salinity, dic_in, ta_in, co2_in, atmospheric
     ft = update_multiply(scl, at[...], 0.000067 / 18.9984)  # Riley (1965)
 
     # Weiss & Price (1980, Mar. Chem., 8, 347-359; Eq 13 with table 6 values)
-    ff = npx.exp(-162.8301 + 218.2968 / (temperature_in_kelvin / 100)
-                + 90.9241 * npx.log(temperature_in_kelvin / 100)
-                - 1.47696 * (temperature_in_kelvin / 100)**2
-                + salinity * (0.025695 - 0.025225 * temperature_in_kelvin / 100
-                + 0.0049867 * (temperature_in_kelvin / 100)**2))
+    ff = npx.exp(
+        -162.8301
+        + 218.2968 / (temperature_in_kelvin / 100)
+        + 90.9241 * npx.log(temperature_in_kelvin / 100)
+        - 1.47696 * (temperature_in_kelvin / 100) ** 2
+        + salinity
+        * (
+            0.025695
+            - 0.025225 * temperature_in_kelvin / 100
+            + 0.0049867 * (temperature_in_kelvin / 100) ** 2
+        )
+    )
 
     # K0 from Weiss 1974
-    k0 = npx.exp(93.4517 / (temperature_in_kelvin / 100) - 60.2409 + 23.3585
-            * npx.log(temperature_in_kelvin / 100) + salinity * (
-                0.023517 - 0.023656 * temperature_in_kelvin / 100 + 0.0047036 * (temperature_in_kelvin / 100) ** 2))
+    k0 = npx.exp(
+        93.4517 / (temperature_in_kelvin / 100)
+        - 60.2409
+        + 23.3585 * npx.log(temperature_in_kelvin / 100)
+        + salinity
+        * (
+            0.023517
+            - 0.023656 * temperature_in_kelvin / 100
+            + 0.0047036 * (temperature_in_kelvin / 100) ** 2
+        )
+    )
 
     # Now calculate FugFac according to Weiss (1974) Marine Chemestry
     rt_x = 83.1451 * temperature_in_kelvin  # Gas constant times temperature
-    delta_x = (57.7 - 0.118 * temperature_in_kelvin)  # In the text '\delta CO_2-air
-    b_x = -1636.75 + 12.0408 * temperature_in_kelvin - 0.0327957 * temperature_in_kelvin ** 2 \
-            + 3.16528 * 1e-5 * temperature_in_kelvin ** 3  # equation 6: Second viral coefficient B(T) (cm^3/mol)
-    FugFac = npx.exp((b_x + 2 * delta_x) / rt_x)  # equation 9 without front factor and ignoring pressure factors
-
+    delta_x = 57.7 - 0.118 * temperature_in_kelvin  # In the text '\delta CO_2-air
+    b_x = (
+        -1636.75
+        + 12.0408 * temperature_in_kelvin
+        - 0.0327957 * temperature_in_kelvin**2
+        + 3.16528 * 1e-5 * temperature_in_kelvin**3
+    )  # equation 6: Second viral coefficient B(T) (cm^3/mol)
+    FugFac = npx.exp(
+        (b_x + 2 * delta_x) / rt_x
+    )  # equation 9 without front factor and ignoring pressure factors
 
     # k1 = [H][HCO3]/[H2CO3]
     # k2 = [H][CO3]/[HCO3]
     # Millero p.664 (1995) using Mehrbach et al. data on SEAWATER scale
     # (Original reference: Dickson and Millero, DSR, 1987)
-    k1 = 10 ** (-1.0 * (3670.7 / temperature_in_kelvin - 62.088 + 9.7944 * npx.log(temperature_in_kelvin)
-                - 0.0118 * salinity + 0.000116 * salinity**2))
+    k1 = 10 ** (
+        -1.0
+        * (
+            3670.7 / temperature_in_kelvin
+            - 62.088
+            + 9.7944 * npx.log(temperature_in_kelvin)
+            - 0.0118 * salinity
+            + 0.000116 * salinity**2
+        )
+    )
 
-    k2 = 10 ** (-1 * (1394.7 / temperature_in_kelvin + 4.777 - 0.0184 * salinity + 0.000118 * salinity**2))
+    k2 = 10 ** (
+        -1
+        * (
+            1394.7 / temperature_in_kelvin
+            + 4.777
+            - 0.0184 * salinity
+            + 0.000118 * salinity**2
+        )
+    )
 
     # k1p = [H][H2PO4]/[H3PO4]
     # Millero p.670 (1995)
-    k1p = npx.exp(-4576.752 / temperature_in_kelvin + 115.540 - 18.453 * npx.log(temperature_in_kelvin)
-                 + (-106.736 / temperature_in_kelvin + 0.69171) * npx.sqrt(salinity)
-                 + (-0.65643 / temperature_in_kelvin - 0.01844) * salinity)
+    k1p = npx.exp(
+        -4576.752 / temperature_in_kelvin
+        + 115.540
+        - 18.453 * npx.log(temperature_in_kelvin)
+        + (-106.736 / temperature_in_kelvin + 0.69171) * npx.sqrt(salinity)
+        + (-0.65643 / temperature_in_kelvin - 0.01844) * salinity
+    )
 
     # k2p = [H][HPO3]/[H2PO4]
-    k2p = npx.exp(-8814.715 / temperature_in_kelvin + 172.1033 - 27.927 * npx.log(temperature_in_kelvin)
-                 + (-160.340 / temperature_in_kelvin + 1.3566) * npx.sqrt(salinity)
-                 + (0.37335 / temperature_in_kelvin - 0.05778) * salinity)
+    k2p = npx.exp(
+        -8814.715 / temperature_in_kelvin
+        + 172.1033
+        - 27.927 * npx.log(temperature_in_kelvin)
+        + (-160.340 / temperature_in_kelvin + 1.3566) * npx.sqrt(salinity)
+        + (0.37335 / temperature_in_kelvin - 0.05778) * salinity
+    )
 
     # k3p = [H][PO4]/[HPO4]
-    k3p = npx.exp(-3070.75 / temperature_in_kelvin - 18.126
-                 + (17.27039 / temperature_in_kelvin + 2.81197) * npx.sqrt(salinity)
-                 + (-44.99486 / temperature_in_kelvin - 0.09984) * salinity)
+    k3p = npx.exp(
+        -3070.75 / temperature_in_kelvin
+        - 18.126
+        + (17.27039 / temperature_in_kelvin + 2.81197) * npx.sqrt(salinity)
+        + (-44.99486 / temperature_in_kelvin - 0.09984) * salinity
+    )
 
     # ksi = [H][SiO(OH)3]/[Si(OH)4]
     # Millero p.671 (1995) using data from Yao and Millero (1995)
     # change to (mol/ kg soln)
     # depth dependancy assumed to be the same as boric acid
     # typo in Millero 1994 corrected in sign of 0.1622
-    ksi = npx.exp(-8904.2 / temperature_in_kelvin + 117.400 - 19.334*npx.log(temperature_in_kelvin)
-                 + (-458.79 / temperature_in_kelvin + 3.5913) * npx.sqrt(_is)
-                 + (188.74 / temperature_in_kelvin - 1.5998) * _is
-                 + (-12.1652 / temperature_in_kelvin + 0.07871) * _is**2
-                 + npx.log(1.0 - 0.001005 * salinity))
+    ksi = npx.exp(
+        -8904.2 / temperature_in_kelvin
+        + 117.400
+        - 19.334 * npx.log(temperature_in_kelvin)
+        + (-458.79 / temperature_in_kelvin + 3.5913) * npx.sqrt(_is)
+        + (188.74 / temperature_in_kelvin - 1.5998) * _is
+        + (-12.1652 / temperature_in_kelvin + 0.07871) * _is**2
+        + npx.log(1.0 - 0.001005 * salinity)
+    )
 
     # kw = [H][OH]
     # Millero p.670 (1995) using composite data
     # pressure dependancy in Millero 1994 corrected for sea water from
     # Millero 1983
 
-    kw = npx.exp(-13847.26 / temperature_in_kelvin + 148.9802
-                - 23.6521 * npx.log(temperature_in_kelvin)
-                + (118.67 / temperature_in_kelvin - 5.977
-                   + 1.0495 * npx.log(temperature_in_kelvin)) * npx.sqrt(salinity) - 0.01615 * salinity)
+    kw = npx.exp(
+        -13847.26 / temperature_in_kelvin
+        + 148.9802
+        - 23.6521 * npx.log(temperature_in_kelvin)
+        + (
+            118.67 / temperature_in_kelvin
+            - 5.977
+            + 1.0495 * npx.log(temperature_in_kelvin)
+        )
+        * npx.sqrt(salinity)
+        - 0.01615 * salinity
+    )
 
     # ks = [H][SO4]/[HSO4] on free H scale
     # Dickson (1990, J. chem. Thermodynamics 22, 113)
     # change to (mol/ kg soln)
-    ks = npx.exp(-4276.1 / temperature_in_kelvin + 141.328 - 23.093 * npx.log(temperature_in_kelvin)
-                + (-13856 / temperature_in_kelvin + 324.57 - 47.986 * npx.log(temperature_in_kelvin)) * npx.sqrt(_is)
-                + (35474 / temperature_in_kelvin - 771.54 + 114.723 * npx.log(temperature_in_kelvin)) * _is
-                - 2698 / temperature_in_kelvin * _is**1.5 + 1776 / temperature_in_kelvin * _is**2
-                + npx.log(1.0 - 0.001005 * salinity))
+    ks = npx.exp(
+        -4276.1 / temperature_in_kelvin
+        + 141.328
+        - 23.093 * npx.log(temperature_in_kelvin)
+        + (
+            -13856 / temperature_in_kelvin
+            + 324.57
+            - 47.986 * npx.log(temperature_in_kelvin)
+        )
+        * npx.sqrt(_is)
+        + (
+            35474 / temperature_in_kelvin
+            - 771.54
+            + 114.723 * npx.log(temperature_in_kelvin)
+        )
+        * _is
+        - 2698 / temperature_in_kelvin * _is**1.5
+        + 1776 / temperature_in_kelvin * _is**2
+        + npx.log(1.0 - 0.001005 * salinity)
+    )
 
     # kf = [H][F]/[HF] on free H scale
     # Dickson and Riley (1979)
     # change to (mol/ kg soln)
-    kf = npx.exp(1590.2 / temperature_in_kelvin - 12.641 + 1.525 * npx.sqrt(_is) + npx.log(1.0 - 0.001005 * salinity))
+    kf = npx.exp(
+        1590.2 / temperature_in_kelvin
+        - 12.641
+        + 1.525 * npx.sqrt(_is)
+        + npx.log(1.0 - 0.001005 * salinity)
+    )
 
     # kb = [H][BO2]/[HBO2]
     # Dickson p.673 (1990)
     # change from htotal to hSWS
     # typo in Millero 1994 corrected in sign of 0.1622
-    kb = npx.exp((-8966.90 - 2890.53 * npx.sqrt(salinity) - 77.942 * salinity
-                 + 1.728 * salinity**1.5 - 0.0996 * salinity**2) / temperature_in_kelvin
-                 + (148.0248 + 137.1942 * npx.sqrt(salinity) + 1.62142 * salinity)
-                 + (-24.4344 - 25.085 * npx.sqrt(salinity) - 0.2474 * salinity) * npx.log(temperature_in_kelvin)
-                 + 0.053105 * npx.sqrt(salinity) * temperature_in_kelvin
-                 + npx.log((1 + (st / ks) + (ft / kf)) / (1 + (st / ks))))
+    kb = npx.exp(
+        (
+            -8966.90
+            - 2890.53 * npx.sqrt(salinity)
+            - 77.942 * salinity
+            + 1.728 * salinity**1.5
+            - 0.0996 * salinity**2
+        )
+        / temperature_in_kelvin
+        + (148.0248 + 137.1942 * npx.sqrt(salinity) + 1.62142 * salinity)
+        + (-24.4344 - 25.085 * npx.sqrt(salinity) - 0.2474 * salinity)
+        * npx.log(temperature_in_kelvin)
+        + 0.053105 * npx.sqrt(salinity) * temperature_in_kelvin
+        + npx.log((1 + (st / ks) + (ft / kf)) / (1 + (st / ks)))
+    )
 
     # From UVic ESCM comments
     # Calculate [H+] SWS when DIC and TA are known at T, S and 1 atm.
@@ -246,8 +356,7 @@ def co2calc_SWS(state, temperature, salinity, dic_in, ta_in, co2_in, atmospheric
 
     # NOTE hSWS should never exceed the safe values, but we can check it
     limit_min = 1e-8
-    boundary = npx.maximum(limit_min,
-                          npx.minimum(1e-6 - vs.hSWS, vs.hSWS - 1e-10))
+    boundary = npx.maximum(limit_min, npx.minimum(1e-6 - vs.hSWS, vs.hSWS - 1e-10))
 
     # boundary guesses are placed equidistant from the guessed best solution
     in1 = vs.hSWS + boundary  # input guess 1
@@ -258,9 +367,15 @@ def co2calc_SWS(state, temperature, salinity, dic_in, ta_in, co2_in, atmospheric
     iter_mask[...] = vs.maskT[:, :, -1]
 
     # Find hSWS by root finding algorithm
-    vs.hSWS = drtsafe_masked(vs, iter_mask, ta_iter_SWS, in1, in2,
-                             args=(k1, k2, k1p, k2p, k3p, st, ks, kf, ft,
-                                   dic, ta, sit, ksi, pt, bt, kw, kb), accuracy=xacc)
+    vs.hSWS = drtsafe_masked(
+        vs,
+        iter_mask,
+        ta_iter_SWS,
+        in1,
+        in2,
+        args=(k1, k2, k1p, k2p, k3p, st, ks, kf, ft, dic, ta, sit, ksi, pt, bt, kw, kb),
+        accuracy=xacc,
+    )
 
     # Calculate [CO2*] as defined in DOE Methods Handbook 1993 Ver. 2,
     # ORNL/CDIC-74, Dickson and Goyet, eds. (Ch 2 p 1+, Eq A.49)
@@ -270,7 +385,9 @@ def co2calc_SWS(state, temperature, salinity, dic_in, ta_in, co2_in, atmospheric
 
     # pCO2 and dpCO2 are for diagnostic purposes only
     pCO2 = co2star / (k0 * FugFac)  # partial CO2 pressure
-    dpCO2 = pCO2 - co2 * atmospheric_pressure  # difference in CO2 pressure between ocean and atmosphere
+    dpCO2 = (
+        pCO2 - co2 * atmospheric_pressure
+    )  # difference in CO2 pressure between ocean and atmosphere
 
     # Convert units back
     vs.co2star[:, :] = co2star / permil
@@ -283,7 +400,9 @@ def co2calc_SWS(state, temperature, salinity, dic_in, ta_in, co2_in, atmospheric
 
 
 @veros_method
-def ta_iter_SWS_numpy(vs, x, k1, k2, k1p, k2p, k3p, st, ks, kf, ft, dic, ta, sit, ksi, pt, bt, kw, kb):
+def ta_iter_SWS_numpy(
+    vs, x, k1, k2, k1p, k2p, k3p, st, ks, kf, ft, dic, ta, sit, ksi, pt, bt, kw, kb
+):
     """
     Sum of free protons calculated from saturation constants
 
@@ -307,18 +426,35 @@ def ta_iter_SWS_numpy(vs, x, k1, k2, k1p, k2p, k3p, st, ks, kf, ft, dic, ta, sit
     db = 2.0 * x + k1
 
     # fn = hco3+co3+borate+oh+hpo4+2*po4+silicate-hfree-hso4-hf-h3po4-ta
-    fn = k1 * x * dic / b + 2.0 * dic * k12 / b + \
-         bt / (1.0 + x / kb) + kw / x + pt * k12p * x / a + \
-         2.0 * pt * k123p / a + sit / (1.0 + x / ksi) - x / c - \
-         st / (1.0 + ks / (x / c)) - ft / (1.0 + kf / (x / c)) -\
-         pt * x3/a - ta
+    fn = (
+        k1 * x * dic / b
+        + 2.0 * dic * k12 / b
+        + bt / (1.0 + x / kb)
+        + kw / x
+        + pt * k12p * x / a
+        + 2.0 * pt * k123p / a
+        + sit / (1.0 + x / ksi)
+        - x / c
+        - st / (1.0 + ks / (x / c))
+        - ft / (1.0 + kf / (x / c))
+        - pt * x3 / a
+        - ta
+    )
 
     # df = dfn/dx
-    df = ((k1 * dic * b) - k1 * x * dic * db) / b2 - 2.0 * dic * k12 * db / b2 - \
-         bt / kb / (1.0 + x / kb)**2.0 - kw / x2 + (pt * k12p * (a - x * da)) / a2 - \
-         2.0 * pt * k123p * da / a2 - sit / ksi / (1.0 + x / ksi)**2 - 1.0 / c - \
-         st * (1.0 + ks / (x / c))**(-2.0) * (ks * c / x2) - ft * (1.0 + kf / (x / c))**(-2.0) * \
-         (kf * c / x2) - pt * x2 * (3.0 * a - x * da) / a2
+    df = (
+        ((k1 * dic * b) - k1 * x * dic * db) / b2
+        - 2.0 * dic * k12 * db / b2
+        - bt / kb / (1.0 + x / kb) ** 2.0
+        - kw / x2
+        + (pt * k12p * (a - x * da)) / a2
+        - 2.0 * pt * k123p * da / a2
+        - sit / ksi / (1.0 + x / ksi) ** 2
+        - 1.0 / c
+        - st * (1.0 + ks / (x / c)) ** (-2.0) * (ks * c / x2)
+        - ft * (1.0 + kf / (x / c)) ** (-2.0) * (kf * c / x2)
+        - pt * x2 * (3.0 * a - x * da) / a2
+    )
 
     return fn, df
 
@@ -340,7 +476,27 @@ def ta_iter_SWS_bohrium(*args):
     for i, arg in enumerate(args[2:]):
         arg_behaving.append(npx.user_kernel.make_behaving(arg, dtype=npx.double))
 
-    mask, x, k1, k2, k1p, k2p, k3p, st, ks, kf, ft, dic, ta, sit, ksi, pt, bt, kw, kb = arg_behaving
+    (
+        mask,
+        x,
+        k1,
+        k2,
+        k1p,
+        k2p,
+        k3p,
+        st,
+        ks,
+        kf,
+        ft,
+        dic,
+        ta,
+        sit,
+        ksi,
+        pt,
+        bt,
+        kw,
+        kb,
+    ) = arg_behaving
 
     fn = npx.empty_like(x)
     df = npx.empty_like(x)
@@ -402,7 +558,9 @@ def ta_iter_SWS_bohrium(*args):
         }
     }
 
-    """ % {'shape': x.size}
+    """ % {
+        "shape": x.size
+    }
 
     npx.user_kernel.execute(kernel, arg_behaving + [fn, df])
 
@@ -446,7 +604,7 @@ def ta_iter_SWS(*args):
     vs = args[0]
     mask = args[1]
 
-    if rs.backend == 'bohrium':
+    if rs.backend == "bohrium":
         return ta_iter_SWS_bohrium(vs, mask, *args[2:])
     else:
         return ta_iter_SWS_numpy(vs, *args[2:])
@@ -494,15 +652,21 @@ def drtsafe_boundary_update(vs, mask, x_low, x_high, df, f, f_low, f_high, drtsa
     already completed cells.
     """
 
-    if rs.backend == 'bohrium':
+    if rs.backend == "bohrium":
         mask_input = npx.user_kernel.make_behaving(mask, dtype=npx.bool)
         x_low_input = npx.user_kernel.make_behaving(x_low, dtype=vs.default_float_type)
-        x_high_input = npx.user_kernel.make_behaving(x_high, dtype=vs.default_float_type)
+        x_high_input = npx.user_kernel.make_behaving(
+            x_high, dtype=vs.default_float_type
+        )
         df_input = npx.user_kernel.make_behaving(df, dtype=vs.default_float_type)
         f_input = npx.user_kernel.make_behaving(f, dtype=vs.default_float_type)
         f_low_input = npx.user_kernel.make_behaving(f_low, dtype=vs.default_float_type)
-        f_high_input = npx.user_kernel.make_behaving(f_high, dtype=vs.default_float_type)
-        drtsafe_val_input = npx.user_kernel.make_behaving(drtsafe_val, dtype=vs.default_float_type)
+        f_high_input = npx.user_kernel.make_behaving(
+            f_high, dtype=vs.default_float_type
+        )
+        drtsafe_val_input = npx.user_kernel.make_behaving(
+            drtsafe_val, dtype=vs.default_float_type
+        )
 
         kernel = """
         #include <stdint.h>
@@ -523,8 +687,22 @@ def drtsafe_boundary_update(vs, mask, x_low, x_high, df, f, f_low, f_high, drtsa
                     }
             }
         }
-        """ % {'shape0': mask.shape[0] * mask.shape[1]}
-        npx.user_kernel.execute(kernel, [mask_input, x_low_input, x_high_input, df_input, f_input, f_low_input, f_high_input, drtsafe_val_input])
+        """ % {
+            "shape0": mask.shape[0] * mask.shape[1]
+        }
+        npx.user_kernel.execute(
+            kernel,
+            [
+                mask_input,
+                x_low_input,
+                x_high_input,
+                df_input,
+                f_input,
+                f_low_input,
+                f_high_input,
+                drtsafe_val_input,
+            ],
+        )
 
         # copy result back into variables
         x_low[...] = x_low_input[...]
@@ -533,9 +711,11 @@ def drtsafe_boundary_update(vs, mask, x_low, x_high, df, f, f_low, f_high, drtsa
         f_high[...] = f_high_input[...]
 
     else:
-        x_low[mask], x_high[mask], f_low[mask], f_high[mask] = npx.where(f[mask] < 0,
-                (drtsafe_val[mask], x_high[mask], f[mask], f_high[mask]),
-                (x_low[mask], drtsafe_val[mask], f_low[mask], f[mask]))
+        x_low[mask], x_high[mask], f_low[mask], f_high[mask] = npx.where(
+            f[mask] < 0,
+            (drtsafe_val[mask], x_high[mask], f[mask], f_high[mask]),
+            (x_low[mask], drtsafe_val[mask], f_low[mask], f[mask]),
+        )
 
 
 @veros_method
@@ -586,15 +766,21 @@ def drtsafe_step(vs, mask, drtsafe_val, x_high, df, f, x_low, dx, dx_old, accura
     This is siginificantly faster than syncing to numpy or working on already completed cells.
     """
 
-    if rs.backend == 'bohrium':
+    if rs.backend == "bohrium":
         mask_input = npx.user_kernel.make_behaving(mask, dtype=npx.int32)
-        drtsafe_val_input = npx.user_kernel.make_behaving(drtsafe_val, dtype=vs.default_float_type)
-        x_high_input = npx.user_kernel.make_behaving(x_high, dtype=vs.default_float_type)
+        drtsafe_val_input = npx.user_kernel.make_behaving(
+            drtsafe_val, dtype=vs.default_float_type
+        )
+        x_high_input = npx.user_kernel.make_behaving(
+            x_high, dtype=vs.default_float_type
+        )
         df_input = npx.user_kernel.make_behaving(df, dtype=vs.default_float_type)
         f_input = npx.user_kernel.make_behaving(f, dtype=vs.default_float_type)
         x_low_input = npx.user_kernel.make_behaving(x_low, dtype=vs.default_float_type)
         dx_input = npx.user_kernel.make_behaving(dx, dtype=vs.default_float_type)
-        dx_old_input = npx.user_kernel.make_behaving(dx_old, dtype=vs.default_float_type)
+        dx_old_input = npx.user_kernel.make_behaving(
+            dx_old, dtype=vs.default_float_type
+        )
 
         kernel = """
         #include <stdint.h>
@@ -623,9 +809,23 @@ def drtsafe_step(vs, mask, drtsafe_val, x_high, df, f, x_low, dx, dx_old, accura
                 mask[i] = fabs(dx[i]) > %(accuracy)E;
             }
         }
-        """ % {'shape0': mask.size, 'accuracy': accuracy}
-        npx.user_kernel.execute(kernel, [mask_input, drtsafe_val_input, x_high_input, df_input,
-                                        f_input, x_low_input, dx_input, dx_old_input])
+        """ % {
+            "shape0": mask.size,
+            "accuracy": accuracy,
+        }
+        npx.user_kernel.execute(
+            kernel,
+            [
+                mask_input,
+                drtsafe_val_input,
+                x_high_input,
+                df_input,
+                f_input,
+                x_low_input,
+                dx_input,
+                dx_old_input,
+            ],
+        )
 
         # Copy results back out
         mask[...] = mask_input[...]
@@ -635,19 +835,34 @@ def drtsafe_step(vs, mask, drtsafe_val, x_high, df, f, x_low, dx, dx_old, accura
 
     else:
         tmp_mask = ((drtsafe_val[mask] - x_high[mask]) * df[mask] - f[mask]) * (
-                    (drtsafe_val[mask] - x_low[mask]) * df[mask] - f[mask]) >= 0
-        tmp_mask = npx.logical_or(tmp_mask, (npx.abs(2.0 * f[mask]) > npx.abs(dx_old[mask] * df[mask])))
+            (drtsafe_val[mask] - x_low[mask]) * df[mask] - f[mask]
+        ) >= 0
+        tmp_mask = npx.logical_or(
+            tmp_mask, (npx.abs(2.0 * f[mask]) > npx.abs(dx_old[mask] * df[mask]))
+        )
 
         dx_old[:] = dx.copy()
-        dx[mask] = npx.where(tmp_mask, 0.5 * (x_high[mask] - x_low[mask]), f[mask] / df[mask])
-        drtsafe_val[mask] = npx.where(tmp_mask, x_low[mask] + dx[mask], drtsafe_val[mask] - dx[mask])
+        dx[mask] = npx.where(
+            tmp_mask, 0.5 * (x_high[mask] - x_low[mask]), f[mask] / df[mask]
+        )
+        drtsafe_val[mask] = npx.where(
+            tmp_mask, x_low[mask] + dx[mask], drtsafe_val[mask] - dx[mask]
+        )
 
         mask[mask] = npx.abs(dx[mask]) > accuracy
 
 
 @veros_method
-def drtsafe_masked(vs, mask, function, guess_low, guess_high, args=None,
-                   accuracy=1e-10, max_iterations=100):
+def drtsafe_masked(
+    vs,
+    mask,
+    function,
+    guess_low,
+    guess_high,
+    args=None,
+    accuracy=1e-10,
+    max_iterations=100,
+):
     """
     Masked version of drtsafe
 
@@ -691,9 +906,11 @@ def drtsafe_masked(vs, mask, function, guess_low, guess_high, args=None,
 
     # Ensure low values have negative function value
     # and high has positive
-    x_low, x_high, f_low, f_high = npx.where(f_low < 0,
-                                            (guess_low, guess_high, f_low, f_high),
-                                            (guess_high, guess_low, f_high, f_low))
+    x_low, x_high, f_low, f_high = npx.where(
+        f_low < 0,
+        (guess_low, guess_high, f_low, f_high),
+        (guess_high, guess_low, f_high, f_low),
+    )
 
     for _ in range(max_iterations):
 
@@ -707,14 +924,18 @@ def drtsafe_masked(vs, mask, function, guess_low, guess_high, args=None,
         f, df = function(vs, mask, drtsafe_val, *args)
 
         # Update search boundaries
-        drtsafe_boundary_update(vs, mask, x_low, x_high, df, f, f_low, f_high, drtsafe_val)
+        drtsafe_boundary_update(
+            vs, mask, x_low, x_high, df, f, f_low, f_high, drtsafe_val
+        )
 
     return drtsafe_val
 
 
 @veros_method
-def drtsafe(vs, function, guess_low, guess_high, args=None, accuracy=1e-10, max_iterations=100):
-    """ Root finding method with bounding box
+def drtsafe(
+    vs, function, guess_low, guess_high, args=None, accuracy=1e-10, max_iterations=100
+):
+    """Root finding method with bounding box
 
     Follows Newton-Raphson step unless unsufficient or the step with take the solution out of bounds.
     Otherwise does birfurcating step.
@@ -755,15 +976,18 @@ def drtsafe(vs, function, guess_low, guess_high, args=None, accuracy=1e-10, max_
 
     # Ensure low values have negative function value
     # and high has positive
-    x_low, x_high, f_low, f_high = npx.where(f_low < 0,
-                                            (guess_low, guess_high, f_low, f_high),
-                                            (guess_high, guess_low, f_high, f_low))
+    x_low, x_high, f_low, f_high = npx.where(
+        f_low < 0,
+        (guess_low, guess_high, f_low, f_high),
+        (guess_high, guess_low, f_high, f_low),
+    )
 
     for _ in range(max_iterations):
 
         # update step size, step and mask
         step_mask = ((drtsafe_val - x_high) * df - f) * (
-                    (drtsafe_val - x_low) * df - f) >= 0
+            (drtsafe_val - x_low) * df - f
+        ) >= 0
         step_mask = npx.logical_or(step_mask, (npx.abs(2.0 * f) > npx.abs(dx_old * df)))
 
         dx_old[:] = dx.copy()
@@ -779,8 +1003,8 @@ def drtsafe(vs, function, guess_low, guess_high, args=None, accuracy=1e-10, max_
         f, df = function(vs, drtsafe_val, *args)
 
         # Update search boundaries
-        x_low, x_high, f_low, f_high = npx.where(f < 0,
-                                                (drtsafe_val, x_high, f, f_high),
-                                                (x_low, drtsafe_val, f_low, f))
+        x_low, x_high, f_low, f_high = npx.where(
+            f < 0, (drtsafe_val, x_high, f, f_high), (x_low, drtsafe_val, f_low, f)
+        )
 
     return drtsafe_val

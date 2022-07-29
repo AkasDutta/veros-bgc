@@ -6,18 +6,18 @@ Rules should always take 3 arguments:
     2. Name of source tracer
     3. Name of sink tracer
 """
-#PENDING CHANGE: Dicts of tracers - eg. settings.npzd_export -  are currently calling the associated arrays as settings.npzd_export[tracer].
+# PENDING CHANGE: Dicts of tracers - eg. settings.npzd_export -  are currently calling the associated arrays as settings.npzd_export[tracer].
 #                Replace this with settings.npzd_export[tracer].data
-#sloppy_feeding, grazing, excretion??
+# sloppy_feeding, grazing, excretion??
 
 
-#Plan: Store only rule archetypes here (eg: `recycling`)
+# Plan: Store only rule archetypes here (eg: `recycling`)
 #      Create a .yml file with everything else (eg: fields for `recycling_to_no3`)
 #      Let the set_foodweb function -  which will be the setup_entrypoint - read this file
 #      and construct and register rules therefrom.
 
-#Advantages: Firstly, the question of group rules disappears; common rule groups will now 
-#      become commonly used .yaml files. Secondly, the distinction between selecting and 
+# Advantages: Firstly, the question of group rules disappears; common rule groups will now
+#      become commonly used .yaml files. Secondly, the distinction between selecting and
 #      registering a rule becomes irrelevant, as we don't have every individual rule hard-coded
 #      Thirdly, it provides symmetry between the treatment of tracers and rules, i.e, nodes
 #      and edges in the foodweb.
@@ -27,7 +27,6 @@ from veros.core.operators import numpy as npx, at, update, update_add, update_mu
 from collections import namedtuple
 
 from . import atmospherefluxes
-
 
 
 @veros_routine
@@ -41,10 +40,11 @@ def primary_production(state, nutrients, plankton, ratio):
     """Primary production: Growth by consumption of light and nutrients"""
     settings = state.settings
 
-
-    updates = {nutrients[i].name: - ratio[i]*plankton.net_primary_production
-                        for i in range(len(nutrients))}
-    updates[plankton.name]= plankton.net_primary_production
+    updates = {
+        nutrients[i].name: -ratio[i] * plankton.net_primary_production
+        for i in range(len(nutrients))
+    }
+    updates[plankton.name] = plankton.net_primary_production
     return updates
 
 
@@ -58,10 +58,11 @@ def recycling(state, plankton, nutrients, ratio):
         Factor for adjusting nutrient contribution. Typically a Redfield ratio.
     """
     settings = state.settings
-    updates = {nutrients[i].name: ratio[i]*plankton.recycle(state) 
-            for i in range(len(nutrients))}
-    updates[plankton.name] = - plankton.recycle(state)
-
+    updates = {
+        nutrients[i].name: ratio[i] * plankton.recycle(state)
+        for i in range(len(nutrients))
+    }
+    updates[plankton.name] = -plankton.recycle(state)
 
     return updates
 
@@ -71,18 +72,20 @@ def mortality(state, plankton, remains):
     """All dead matter from plankton is converted to detritus"""
     settings = state.settings
     death = plankton.mortality(state)
-    updates = {plankton.name: - death}
+    updates = {plankton.name: -death}
 
     if not plankton.calcite_producing:
         updates[remains.name] = death
     else:
-        detritus = remains[0]; calcite = remains[1]
+        detritus = remains[0]
+        calcite = remains[1]
         updates[detritus.name] = death
         updates[calcite.name] = death * settings.capr * settings.redfield_ratio_CN
 
         calcite.dprca = updates[calcite.name]
 
     return updates
+
 
 @veros_routine
 def grazing_cycle(state, prey, grazer, remains, nutrients, ratios):
@@ -91,22 +94,24 @@ def grazing_cycle(state, prey, grazer, remains, nutrients, ratios):
     foodweb = state.foodweb
 
     grazed, digested, excreted, sloppy_feeding = grazer.grazing(state, prey)
-    
+
     updates = {grazer.name: digested, prey.name: grazed}
 
     if not prey.calcite_producing:
         updates[remains.name] = sloppy_feeding
     else:
-        detritus = remains[0]; calcite = remains[1]
+        detritus = remains[0]
+        calcite = remains[1]
         updates[detritus.name] = sloppy_feeding
-        updates[calcite.name] = sloppy_feeding * settings.capr * settings.redfield_ratio_CN
-        calcite.dprca  = updates[calcite.name]
+        updates[calcite.name] = (
+            sloppy_feeding * settings.capr * settings.redfield_ratio_CN
+        )
+        calcite.dprca = updates[calcite.name]
 
     for i in range(len(nutrients)):
-        updates[nutrients[i].name] = ratios[i] * excreted 
-    
-    return updates
+        updates[nutrients[i].name] = ratios[i] * excreted
 
+    return updates
 
 
 @veros_routine
@@ -126,7 +131,8 @@ def calcite_production(state, dic, alk, calcite):
 
     # changes to production of calcite
     dprca = calcite.dprca
-    return {dic.name: -dprca, alk.name: - 2* dprca}
+    return {dic.name: -dprca, alk.name: -2 * dprca}
+
 
 @veros_routine
 def post_redistribute_calcite(state, calcite, tracers, ratios):
@@ -137,9 +143,11 @@ def post_redistribute_calcite(state, calcite, tracers, ratios):
 
     total_production = (calcite.temp * vs.dzt).sum(axis=2)
     redistributed_production = total_production[:, :, npx.newaxis] * vs.rcak
-    
-    updates = {tracers[i].name: ratios[i]*redistributed_production 
-            for i in range(len(tracers))}
+
+    updates = {
+        tracers[i].name: ratios[i] * redistributed_production
+        for i in range(len(tracers))
+    }
     return updates
 
 
@@ -149,7 +157,7 @@ def pre_reset_calcite(state, calcite):
     vs = state.variables
     settings = state.settings
 
-    return {calcite.name: - calcite.temp}
+    return {calcite.name: -calcite.temp}
 
 
 @veros_routine
@@ -168,7 +176,9 @@ def dic_alk_scale(state, dic, alkalinity):
     vs = state.variables
     settings = state.settings
 
-    return {alkalinity: (dic.temp - dic.data[:, :, :, vs.tau]) / settings.redfield_ratio_CN}
+    return {
+        alkalinity: (dic.temp - dic.data[:, :, :, vs.tau]) / settings.redfield_ratio_CN
+    }
 
 
 @veros_routine
@@ -191,30 +201,43 @@ def bottom_remineralization(state, source, sink, scale):
     return {sink.name: foodweb.deposits[source.name] * scale}
 
 
+RuleTemplates = {
+    "empty_rule": (empty_rule, []),
+    "primary_production": (primary_production, ["nutrients", "plankton", "ratio"]),
+    "recycling": (recycling, ["plankton", "nutrients", "ratio"]),
+    "mortality": (mortality, ["plankton", "detritus"]),
+    "grazing_cycle": (grazing_cycle, ["eaten", "zooplankton"]),
+    "calcite_production": (calcite_production, ["plankton", "DIC", "alk", "calcite"]),
+    "post_redistribute_calcite": (
+        post_redistribute_calcite,
+        ["calcite", "tracers", "ratios"],
+    ),
+    "pre_reset_calcite": (pre_reset_calcite, ["calcite"]),
+    "co2_surface_flux": (co2_surface_flux, ["co2", "dic"]),
+    "dic_alk_scale": (dic_alk_scale, ["DIC", "alkalinity"]),
+    "bottom_remineralization": (bottom_remineralization, ["source", "sink", "scale"]),
+}
 
-RuleTemplates = {"empty_rule": (empty_rule, []),
-                "primary_production": (primary_production, ["nutrients", "plankton", "ratio"]), 
-                "recycling": (recycling,["plankton", "nutrients", "ratio"]),
-                "mortality": (mortality,["plankton", "detritus"]), 
-                "grazing_cycle": (grazing_cycle,["eaten", "zooplankton"]), 
-                "calcite_production": (calcite_production,["plankton", "DIC", "alk", "calcite"]),
-                "post_redistribute_calcite": (post_redistribute_calcite,["calcite", "tracers", "ratios"]), 
-                "pre_reset_calcite": (pre_reset_calcite,["calcite"]),
-                "co2_surface_flux": (co2_surface_flux,["co2", "dic"]),
-                "dic_alk_scale": (dic_alk_scale,["DIC", "alkalinity"]),
-                "bottom_remineralization": (bottom_remineralization,["source", "sink", "scale"]),
-               }
 
-
-class Rule():
-    def __init__(self, state, name, function, arguments, source, sink,
-     label=None, boundary=None, group="Primary"):
+class Rule:
+    def __init__(
+        self,
+        state,
+        name,
+        function,
+        arguments,
+        source,
+        sink,
+        label=None,
+        boundary=None,
+        group="Primary",
+    ):
         vs = state.variables
         settings = state.settings
 
         self.name = name
         self.source = source
-        self.sink  = sink
+        self.sink = sink
         self.label = label
         self.group = group
         self.boundary = self._get_boundary(state, boundary)
@@ -224,7 +247,7 @@ class Rule():
 
     @veros_routine
     def _get_boundary(self, state, boundary_string):
-        """ Return slice representing boundary
+        """Return slice representing boundary
 
         Parameters
         ----------
@@ -234,9 +257,9 @@ class Rule():
             BOTTOM:        bottom_mask as set by veros
             else:          [:, :, :] everything
         """
-        
-        vs =  state.variables
-        settings =  state.settings
+
+        vs = state.variables
+        settings = state.settings
 
         if boundary_string == "SURFACE":
             return tuple([slice(None, None, None), slice(None, None, None), -1])
@@ -258,5 +281,3 @@ class Rule():
         for key, value in updates.items():
             updates[key] = update_multiply(value, at[...], self.flag)
         return updates
-
-

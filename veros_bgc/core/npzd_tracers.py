@@ -6,8 +6,9 @@ from veros.core.operators import numpy as npx, update, at, update_add, update_mu
 
 from veros import veros_routine
 
-class NPZD_tracer():
-    """ Class for npzd tracers to store additional information about themselves.
+
+class NPZD_tracer:
+    """Class for npzd tracers to store additional information about themselves.
 
     Note
     ----
@@ -49,69 +50,107 @@ class NPZD_tracer():
         If set: Factor for how much light is blocked
     """
 
-    def __new__(cls, name, input_array, sinking_speed=None,
-                 light_attenuation=None, transport=True, description=None,
-                 minimum_concentration=0):
-        
+    _types = {
+        "name": str,
+        "index": int,
+        "sinking_speed": float,
+        "unit": str,
+        "light_attenuation": float,
+        "transport": bool,
+        "description": str,
+    }
+
+    def __new__(
+        cls,
+        name,
+        input_array,
+        index=None,
+        sinking_speed=None,
+        unit=None,
+        light_attenuation=None,
+        transport=True,
+        description=None,
+    ):
+
         obj = super().__new__(cls)
-        
+
         if sinking_speed is not None:
             obj.sinking_speed = sinking_speed
         if light_attenuation is not None:
             obj.light_attenuation = light_attenuation
 
         obj.name = name
+        obj.index = index
         obj.data = input_array
         obj.transport = transport
+        obj.unit = unit
         obj.description = description
-        obj.min = minimum_concentration
-        obj.temp = npx.zeros_like(obj.data[:,:,:])
-        obj.flag = True #Defaults to true
+        obj.temp = npx.zeros_like(obj.data[:, :, :])
+        obj.flag = True  # Defaults to true
+
         return obj
-    
+
     @veros_routine
     def reset_temp(self, state):
-        vs=state.variables
-        settings=state.settings
+        vs = state.variables
+        settings = state.settings
 
-        self.temp = self.data[:,:,:, vs.tau]
-    
+        self.temp = self.data[:, :, :, vs.tau]
+
     def check_missing(self):
         Missing = ""
         if self.name is None:
             Missing += "name, "
         if self.data is None:
             Missing += "corresponding Variable array, "
+        if self.index is None:
+            Missing += "BGC_index (this error should be impossible), "
+        if self.unit is None:
+            Missing += "unit, "
         if self.transport is None:
             Missing += "transport, "
         if self.description is None:
             Missing += "description, "
         return Missing
-    
+
+    def check_types(self):
+        for att in self._types.keys():
+            if (
+                isinstance(self.__dict__(att), self._types[att])
+                or self.__dict__[att] is None
+            ):
+                raise TypeError(
+                    f"{att} should be of type {self._type[att]}, not {type(self.__dict__(att))}"
+                )
+
     def isvalid(self):
-        #TODO add TypeErrors
+        # TODO add TypeErrors
         Missing = self.check_missing(self)
         if Missing != "":
             raise ValueError(f"The field(s) {Missing} are missing.")
-       
+        self.check_types(self)
+
 
 #    def __array_finalize__(self, obj):
 #        if obj is None:
 #            return
 
-        # If we are slicing, obj will have __dir__ therefore we need to set attributes
-        # on new sliced array
+# If we are slicing, obj will have __dir__ therefore we need to set attributes
+# on new sliced array
 #        if hasattr(obj, "__dir__"):
 #            for attribute in (set(dir(obj)) - set(dir(self))):
 #                setattr(self, attribute, getattr(obj, attribute))
 
+
 class Calcite(NPZD_tracer):
+    # Not augmenting _types as dprca is set by the code, not the user.
     def __new__(cls, name, input_array, dprca=0, **kwargs):
         obj = super().__new__(cls, name, input_array, **kwargs)
         obj.dprca = dprca
 
+
 class Recyclable_tracer(NPZD_tracer):
-    """ A recyclable tracer
+    """A recyclable tracer
 
     This would be tracer, which may be a tracer like detritus, which can be recycled
 
@@ -136,11 +175,14 @@ class Recyclable_tracer(NPZD_tracer):
 
     + All attributes held by super class
     """
-    def __new__(cls, name, input_array, recycling_rate=0, **kwargs):
+
+    _types = super()._types
+    _types["recycling_rate"] = float
+
+    def __new__(cls, name, input_array, recycling_rate=0.0, **kwargs):
         obj = super().__new__(cls, name, input_array)
         obj.recycling_rate = recycling_rate
         return obj
-       
 
     @veros_routine
     def recycle(self, state):
@@ -149,7 +191,7 @@ class Recyclable_tracer(NPZD_tracer):
         """
         vs = state.variables
         settings = self.settings
-        
+
         return vs.bct * self.recycling_rate * self.temp
 
     def check_missing(self):
@@ -159,7 +201,7 @@ class Recyclable_tracer(NPZD_tracer):
 
 
 class Plankton(Recyclable_tracer):
-    """ Class for plankton object, which is both recyclable and displays mortality
+    """Class for plankton object, which is both recyclable and displays mortality
 
     This class is intended as a base for phytoplankton and zooplankton and not
     as a standalone class
@@ -191,8 +233,14 @@ class Plankton(Recyclable_tracer):
     + All attributes held by super class
     """
 
-    def __new__(cls, name, input_array,  mortality_rate=0, calcite_producing=False, **kwargs):
-        obj = super().__new__(cls, name, input_array,  **kwargs)
+    _types = super()._types
+    _types["mortality_rate"] = float
+    _types["calcite_producing"] = bool
+
+    def __new__(
+        cls, name, input_array, mortality_rate=0.0, calcite_producing=False, **kwargs
+    ):
+        obj = super().__new__(cls, name, input_array, **kwargs)
         obj.mortality_rate = mortality_rate
         obj.calcite_producing = calcite_producing
         return obj
@@ -209,10 +257,10 @@ class Plankton(Recyclable_tracer):
         Missing = super().check_missing(self)
         if self.mortality is None:
             Missing += "mortality, "
-    
+
 
 class Phytoplankton(Plankton):
-    """ Phytoplankton also has primary production
+    """Phytoplankton also has primary production
 
     Parameters
     ----------
@@ -236,8 +284,17 @@ class Phytoplankton(Plankton):
     + All attributes held by super class
     """
 
-    def __new__(cls, name, input_array, growth_parameter=None, net_primary_production=None, 
-        **kwargs):
+    _types = super()._types
+    _types["growth_parameter"] = float
+
+    def __new__(
+        cls,
+        name,
+        input_array,
+        growth_parameter=None,
+        net_primary_production=None,
+        **kwargs,
+    ):
 
         obj = super().__new__(cls, name, input_array, **kwargs)
         obj.growth_parameter = growth_parameter
@@ -246,20 +303,22 @@ class Phytoplankton(Plankton):
 
     @veros_routine
     def potential_growth(self, state, grid_light, light_attenuation):
-        """ Light limited growth, not limited growth """
+        """Light limited growth, not limited growth"""
         vs = state.variables
-        settings= state.settings
+        settings = state.settings
 
         f1 = npx.exp(-light_attenuation)  # available light
         jmax = self.growth_parameter * vs.bct  # maximum growth
         gd = jmax * vs.dayfrac[npx.newaxis, :, npx.newaxis]  # growth in fraction of day
-        avej = self._avg_J(state, f1, gd, grid_light, light_attenuation)  # light limited growth
+        avej = self._avg_J(
+            state, f1, gd, grid_light, light_attenuation
+        )  # light limited growth
 
         return jmax, avej
 
     @veros_routine
     def _avg_J(self, state, f1, gd, grid_light, light_attenuation):
-        """ Average light over a triuneral cycle
+        """Average light over a triuneral cycle
 
         Note
         ----
@@ -276,7 +335,7 @@ class Phytoplankton(Plankton):
         phi2 = npx.log(u2 + npx.sqrt(1 + u2**2)) - (npx.sqrt(1 + u2**2) - 1) / u2
 
         return gd * (phi1 - phi2) / light_attenuation
-    
+
     def check_missing(self):
         Missing = super().check_missing(self)
         if self.growth_parameter is None:
@@ -284,7 +343,7 @@ class Phytoplankton(Plankton):
 
 
 class Zooplankton(Plankton):
-    """ Zooplankton displays quadratic mortality rate but otherwise is similar to ordinary phytoplankton
+    """Zooplankton displays quadratic mortality rate but otherwise is similar to ordinary phytoplankton
 
     Parameters
     ----------
@@ -338,10 +397,26 @@ class Zooplankton(Plankton):
     + All attributes held by super class
     """
 
-    def __new__(cls, name, input_array, max_grazing=None, grazing_saturation_constant=None,
-                grazing_preferences=None, assimilation_efficiency=None,
-                growth_efficiency=20,
-                maximum_growth_temperature=None, **kwargs):
+    _types = super()._types
+    _types["max_grazing"] = float
+    _types["grazing_saturation_constant"] = float
+    _types["grazing_preferences"] = dict
+    _types["assimilation_efficiency"] = float
+    _types["growth_efficiency"] = float
+    _types["maximum_growth_temperature"] = float
+
+    def __new__(
+        cls,
+        name,
+        input_array,
+        max_grazing=None,
+        grazing_saturation_constant=None,
+        grazing_preferences=None,
+        assimilation_efficiency=None,
+        growth_efficiency=None,
+        maximum_growth_temperature=20.0,
+        **kwargs,
+    ):
         obj = super().__new__(cls, input_array, name, **kwargs)
 
         obj.max_grazing = max_grazing
@@ -363,66 +438,71 @@ class Zooplankton(Plankton):
         vs = state.variables
         settings = state.settings
 
-        self._gmax = self.max_grazing * settings.bbio ** (settings.cbio *
-                     npx.minimum(self.maximum_growth_temperature, vs.temp[..., vs.tau]))
+        self._gmax = self.max_grazing * settings.bbio ** (
+            settings.cbio
+            * npx.minimum(self.maximum_growth_temperature, vs.temp[..., vs.tau])
+        )
 
     @veros_routine
     def mortality(self, state):
         """
         Zooplankton is modelled with a quadratic mortality
         """
-        return self.mortality_rate * self.temp ** 2
+        return self.mortality_rate * self.temp**2
 
     @veros_routine
     def reset_thetaZ(self, state):
         settings = state.settings
-        tracers  = settings.foodweb.tracers
+        tracers = settings.foodweb.tracers
 
-        return sum([pref_score * tracers[preference].temp for preference, pref_score
-                      in self.grazing_preferences.items()]) +\
-                 settings.saturation_constant_Z_grazing * settings.redfield_ratio_PN
+        return (
+            sum(
+                [
+                    pref_score * tracers[preference].temp
+                    for preference, pref_score in self.grazing_preferences.items()
+                ]
+            )
+            + settings.saturation_constant_Z_grazing * settings.redfield_ratio_PN
+        )
 
     @veros_routine
     def grazing(self, state, prey):
         """
-        Zooplankton grazing on set preys
+                Zooplankton grazing on set preys
 
-        Parameters
-        ----------
-        prey : any tracer that can be grazed upon
-.
+                Parameters
+                ----------
+                prey : any tracer that can be grazed upon
+        .
 
-        Returns
-        -------
-        Values for grazing, digestion, excretion and sloppy feeding corresponding to the prey
-        species
+                Returns
+                -------
+                Values for grazing, digestion, excretion and sloppy feeding corresponding to the prey
+                species
 
-        Note
-        ----
-        The result of this method is primarily useful in rules
+                Note
+                ----
+                The result of this method is primarily useful in rules
 
-        Note
-        ----
-        thetaZ is scaled by settings.redfield_ratio_PN. This may not be desirable in the 
-        general case
+                Note
+                ----
+                thetaZ is scaled by settings.redfield_ratio_PN. This may not be desirable in the
+                general case
         """
-        settings =  state.settings
+        settings = state.settings
 
-        ingestion =  self.grazing_preferences[prey.name]/self.thetaZ
+        ingestion = self.grazing_preferences[prey.name] / self.thetaZ
 
         grazing = self._gmax * ingestion * prey.temp * self.temp
 
-
         digestion = self.assimilation_efficiency * grazing
 
-        sloppy_feeding = (1-self.assimilation_efficiency) * grazing
+        sloppy_feeding = (1 - self.assimilation_efficiency) * grazing
 
         excretion = (1 - self.growth_efficiency) * digestion
 
-
-
         return grazing, digestion, excretion, sloppy_feeding
-    
+
     def check_missing(self):
         Missing = super().check_missing(self)
         if self.max_grazing is None:
@@ -438,15 +518,22 @@ class Zooplankton(Plankton):
         if self.maximum_growth_temperature is None:
             Missing += "maximum_growth_temperature, "
 
-TracerClasses = {
-    #The key HAS to be the exact name of the class.
-    #Bug checks elsewhere are of the form type(tracer).__name__ in TracerClasses.keys()
-    #So the name of the class, as a string, has to be exactly the key used in this dict
+    def isvalid(self):
+        super().isvalid(self)
+        if self.growth_efficiency < 0 or self.growth_efficiency > 1:
+            raise ValueError("Growth efficiency should be in [0,1]")
+        if self.assimilation_efficiency < 0 or self.assimilation_efficiency > 1:
+            raise ValueError("Assimilation efficiency should be in [0,1]")
 
+
+TracerClasses = {
+    # The key HAS to be the exact name of the class.
+    # Bug checks elsewhere are of the form type(tracer).__name__ in TracerClasses.keys()
+    # So the name of the class, as a string, has to be exactly the key used in this dict
     "NPZD_tracer": NPZD_tracer,
     "Calcite": Calcite,
     "Recyclable_tracer": Recyclable_tracer,
     "Plankton": Plankton,
     "Phytoplankton": Phytoplankton,
-    "Zooplankton": Zooplankton
+    "Zooplankton": Zooplankton,
 }

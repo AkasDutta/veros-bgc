@@ -6,18 +6,17 @@ from veros import veros_method
 
 
 class NPZDMonitor(VerosDiagnostic):
-    """Diagnostic monitoring nutrients and plankton concentrations
-    """
+    """Diagnostic monitoring nutrients and plankton concentrations"""
 
     name = "npzd"  #:
     output_frequency = None  #: Frequency (in seconds) in which output is written
     restart_attributes = []
     save_graph = False  #: Whether or not to save a graph of the selected dynamics
     graph_attr = {  #: Properties of the graph (graphviz)
-        'splines': 'ortho',
-        'center': 'true',
-        'nodesep': '0.05',
-        'node': 'square'
+        "splines": "ortho",
+        "center": "true",
+        "nodesep": "0.05",
+        "node": "square",
     }
 
     def __init__(self, setup):
@@ -32,24 +31,32 @@ class NPZDMonitor(VerosDiagnostic):
         vs = state.variables
         settings = state.settings
 
-        cell_volume = vs.area_t[2:-2, 2:-2, npx.newaxis] * vs.dzt[npx.newaxis, npx.newaxis, :] * vs.maskT[2:-2, 2:-2, :]
-        
+        cell_volume = (
+            vs.area_t[2:-2, 2:-2, npx.newaxis]
+            * vs.dzt[npx.newaxis, npx.newaxis, :]
+            * vs.maskT[2:-2, 2:-2, :]
+        )
+
         if settings.enable_npzd:
 
-            po4_sum = vs.phytoplankton[2:-2, 2:-2, :, vs.tau] * settings.redfield_ratio_PN \
-                    + vs.detritus[2:-2, 2:-2, :, vs.tau] * settings.redfield_ratio_PN \
-                    + vs.zooplankton[2:-2, 2:-2, :, vs.tau] * settings.redfield_ratio_PN \
-                    + vs.po4[2:-2, 2:-2, :, vs.tau]
+            po4_sum = (
+                vs.phytoplankton[2:-2, 2:-2, :, vs.tau] * settings.redfield_ratio_PN
+                + vs.detritus[2:-2, 2:-2, :, vs.tau] * settings.redfield_ratio_PN
+                + vs.zooplankton[2:-2, 2:-2, :, vs.tau] * settings.redfield_ratio_PN
+                + vs.po4[2:-2, 2:-2, :, vs.tau]
+            )
         else:
             po4_sum = vs.po4[2:-2, 2:-2, :, vs.tau]
 
         self.po4_total = npx.sum(po4_sum * cell_volume)
 
         if settings.enable_carbon:
-            dic_sum = vs.phytoplankton[2:-2, 2:-2, :, vs.tau] * settings.redfeld_ratio_CN\
-                      + vs.detritus[2:-2, 2:-2, :, vs.tau] * settings.redfeld_ratio_CN\
-                      + vs.zooplankton[2:-2, 2:-2, :, vs.tau] * settings.redfeld_ratio_CN\
-                      + vs.dic[2:-2, 2:-2, :, vs.tau]
+            dic_sum = (
+                vs.phytoplankton[2:-2, 2:-2, :, vs.tau] * settings.redfeld_ratio_CN
+                + vs.detritus[2:-2, 2:-2, :, vs.tau] * settings.redfeld_ratio_CN
+                + vs.zooplankton[2:-2, 2:-2, :, vs.tau] * settings.redfeld_ratio_CN
+                + vs.dic[2:-2, 2:-2, :, vs.tau]
+            )
 
             self.dic_total = npx.sum(dic_sum * cell_volume)
 
@@ -61,15 +68,16 @@ class NPZDMonitor(VerosDiagnostic):
         """
         Print NPZD interaction graph
         """
-        vs  = state.variables
+        vs = state.variables
         settings = state.settings
 
-        #Will update the graph bit later
+        # Will update the graph bit later
         if self.save_graph:
             from graphviz import Digraph
-            npzd_graph = Digraph('npzd_dynamics', filename='npzd_dynamics.gv')
-            label_prefix = '\\tiny '  # should be selectable in settings allows for better exporting to tex
-            label_prefix = ''
+
+            npzd_graph = Digraph("npzd_dynamics", filename="npzd_dynamics.gv")
+            label_prefix = "\\tiny "  # should be selectable in settings allows for better exporting to tex
+            label_prefix = ""
 
             # Create a node for all selected tracers
             # Drawing edges also creates nodes, so this just ensures, we se it,
@@ -78,9 +86,14 @@ class NPZDMonitor(VerosDiagnostic):
                 npzd_graph.node(tracer)
 
                 # If a tracer has the sinking_speed attribute indicate on the graph
-                if hasattr(tracer_data, 'sinking_speed'):
-                    npzd_graph.node('Bottom', shape='square')
-                    npzd_graph.edge(tracer, 'Bottom', label=label_prefix + 'sinking', lblstyle='sloped,above')
+                if hasattr(tracer_data, "sinking_speed"):
+                    npzd_graph.node("Bottom", shape="square")
+                    npzd_graph.edge(
+                        tracer,
+                        "Bottom",
+                        label=label_prefix + "sinking",
+                        lblstyle="sloped,above",
+                    )
 
             # Common source rules are split up into several rules
             # This causes a duplication of the first registerd rule
@@ -89,7 +102,9 @@ class NPZDMonitor(VerosDiagnostic):
             skiprules = []
             for name, rule in vs.common_source_rules.items():
                 # Construct the list of rule names
-                rule_names = [name + '_' + rule[0][1]] + [name + '_' + rule[i][2] for i in range(1, len(rule))]
+                rule_names = [name + "_" + rule[0][1]] + [
+                    name + "_" + rule[i][2] for i in range(1, len(rule))
+                ]
 
                 # If there is more than one indicate, that it should be skipped from drawing
                 if len(rule_names) > 1:
@@ -100,51 +115,84 @@ class NPZDMonitor(VerosDiagnostic):
                 if rule in skiprules:
                     continue
 
-                npzd_graph.edge(rule.source, rule.sink, label=label_prefix + rule.label, lblstyle='sloped, above')
+                npzd_graph.edge(
+                    rule.source,
+                    rule.sink,
+                    label=label_prefix + rule.label,
+                    lblstyle="sloped, above",
+                )
 
             # Draw pre rules dotted
             for rule in vs.npzd_pre_rules:
                 if rule in skiprules:
                     continue
 
-                npzd_graph.edge(rule.source, rule.sink, label=label_prefix + rule.label, style='dotted', lblstyle='sloped, above')
+                npzd_graph.edge(
+                    rule.source,
+                    rule.sink,
+                    label=label_prefix + rule.label,
+                    style="dotted",
+                    lblstyle="sloped, above",
+                )
 
             # Draw post rules dashed
             for rule in vs.npzd_post_rules:
                 if rule in skiprules:
                     continue
 
-                npzd_graph.edge(rule.source, rule.sink, label=label_prefix + rule.label, style='dashed', lblstyle='sloped, above')
+                npzd_graph.edge(
+                    rule.source,
+                    rule.sink,
+                    label=label_prefix + rule.label,
+                    style="dashed",
+                    lblstyle="sloped, above",
+                )
 
             self.save_graph = False
-            npzd_graph.render('npzd_graph', view=False)
+            npzd_graph.render("npzd_graph", view=False)
 
         """
         Total phosphorus should be (approximately) constant
         """
-        cell_volume = vs.area_t[2:-2, 2:-2, npx.newaxis] * vs.dzt[npx.newaxis, npx.newaxis, :] * vs.maskT[2:-2, 2:-2, :]
+        cell_volume = (
+            vs.area_t[2:-2, 2:-2, npx.newaxis]
+            * vs.dzt[npx.newaxis, npx.newaxis, :]
+            * vs.maskT[2:-2, 2:-2, :]
+        )
 
         if settings.enable_npzd:
-            po4_sum = vs.phytoplankton[2:-2, 2:-2, :, vs.tau] * settings.redfeld_ratio_PN\
-                    + vs.detritus[2:-2, 2:-2, :, vs.tau] * settings.redfeld_ratio_PN\
-                    + vs.zooplankton[2:-2, 2:-2, :, vs.tau] * settings.redfeld_ratio_PN\
-                    + vs.po4[2:-2, 2:-2, :, vs.tau]
+            po4_sum = (
+                vs.phytoplankton[2:-2, 2:-2, :, vs.tau] * settings.redfeld_ratio_PN
+                + vs.detritus[2:-2, 2:-2, :, vs.tau] * settings.redfeld_ratio_PN
+                + vs.zooplankton[2:-2, 2:-2, :, vs.tau] * settings.redfeld_ratio_PN
+                + vs.po4[2:-2, 2:-2, :, vs.tau]
+            )
         else:
             po4_sum = vs.po4[2:-2, 2:-2, :, vs.tau]
 
         if settings.enable_carbon:
-            dic_sum = vs.phytoplankton[2:-2, 2:-2, :, vs.tau] * settings.redfeld_ratio_CN\
-                      + vs.detritus[2:-2, 2:-2, :, vs.tau] * settings.redfeld_ratio_CN\
-                      + vs.zooplankton[2:-2, 2:-2, :, vs.tau] * settings.redfeld_ratio_CN\
-                      + vs.dic[2:-2, 2:-2, :, vs.tau]
+            dic_sum = (
+                vs.phytoplankton[2:-2, 2:-2, :, vs.tau] * settings.redfeld_ratio_CN
+                + vs.detritus[2:-2, 2:-2, :, vs.tau] * settings.redfeld_ratio_CN
+                + vs.zooplankton[2:-2, 2:-2, :, vs.tau] * settings.redfeld_ratio_CN
+                + vs.dic[2:-2, 2:-2, :, vs.tau]
+            )
 
         po4_total = npx.sum(po4_sum * cell_volume)
-        logger.diagnostic(" total phosphorus: {}, relative change: {}".format(po4_total, (po4_total - self.po4_total)/self.po4_total))
+        logger.diagnostic(
+            " total phosphorus: {}, relative change: {}".format(
+                po4_total, (po4_total - self.po4_total) / self.po4_total
+            )
+        )
         self.po4_total = po4_total[...]
 
         if settings.enable_carbon:
             dic_total = npx.sum(dic_sum * cell_volume)
-            logger.diagnostic(" total DIC: {}, relative change: {}".format(dic_total, (dic_total - self.dic_total)/self.dic_total))
+            logger.diagnostic(
+                " total DIC: {}, relative change: {}".format(
+                    dic_total, (dic_total - self.dic_total) / self.dic_total
+                )
+            )
             self.dic_total = dic_total.copy()
 
         for var in self.output_variables:
@@ -154,12 +202,16 @@ class NPZDMonitor(VerosDiagnostic):
                 recycled_total = 0
 
             if var in vs.mortality:
-                mortality_total = npx.sum(vs.mortality[var][2:-2, 2:-2, :] * cell_volume)
+                mortality_total = npx.sum(
+                    vs.mortality[var][2:-2, 2:-2, :] * cell_volume
+                )
             else:
                 mortality_total = 0
 
             if var in vs.net_primary_production:
-                npp_total = npx.sum(vs.net_primary_production[var][2:-2, 2:-2, :] * cell_volume)
+                npp_total = npx.sum(
+                    vs.net_primary_production[var][2:-2, 2:-2, :] * cell_volume
+                )
             else:
                 npp_total = 0
 
@@ -168,16 +220,24 @@ class NPZDMonitor(VerosDiagnostic):
             else:
                 grazing_total = 0
 
-            logger.diagnostic(' total recycled {}: {}'.format(var, recycled_total))
-            logger.diagnostic(' total mortality {}: {}'.format(var, mortality_total))
-            logger.diagnostic(' total npp {}: {}'.format(var, npp_total))
-            logger.diagnostic(' total grazed {}: {}'.format(var, grazing_total))
+            logger.diagnostic(" total recycled {}: {}".format(var, recycled_total))
+            logger.diagnostic(" total mortality {}: {}".format(var, mortality_total))
+            logger.diagnostic(" total npp {}: {}".format(var, npp_total))
+            logger.diagnostic(" total grazed {}: {}".format(var, grazing_total))
 
         for var in self.surface_out:
-            logger.diagnostic(' mean {} surface concentration: {} mmol/m^3'.format(var, vs.npzd_tracers[var][vs.maskT[:, :, -1]].mean()))
+            logger.diagnostic(
+                " mean {} surface concentration: {} mmol/m^3".format(
+                    var, vs.npzd_tracers[var][vs.maskT[:, :, -1]].mean()
+                )
+            )
 
         for var in self.bottom_out:
-            logger.diagnostic(' mean {} bottom concentration: {} mmol/m^3'.format(var, vs.npzd_tracers[var][vs.bottom_mask].mean()))
+            logger.diagnostic(
+                " mean {} bottom concentration: {} mmol/m^3".format(
+                    var, vs.npzd_tracers[var][vs.bottom_mask].mean()
+                )
+            )
 
     def read_restart(self, vs, infile):
         pass
