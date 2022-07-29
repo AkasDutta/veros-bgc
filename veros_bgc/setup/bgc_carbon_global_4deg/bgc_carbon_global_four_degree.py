@@ -24,7 +24,7 @@ DATA_FILES = veros.tools.get_assets(
 # we need to be able to interpret surfaces and bottom boundaries in terms of the grid
 
 
-class GlobalFourDegreeBGC(VerosSetup):
+class GlobalFourDegreeBGC_Carbon(VerosSetup):
     """Global 4 degree model with 15 vertical levels and biogeochemistry.
 
     Reference:
@@ -54,10 +54,10 @@ class GlobalFourDegreeBGC(VerosSetup):
 
         settings.trcmin = 0  # Minimum concentration of a tracer
         settings.enable_npzd = True
-        settings.enable_carbon = False
+        settings.enable_carbon = True
 
-        settings._bgc_rules_path = os.path.join(BASE_PATH, "npzd_rules.yml")
-        settings._bgc_tracers_path = os.path.join(BASE_PATH, "npzd_tracers.yml")
+        settings._bgc_rules_path = os.path.join(BASE_PATH, "npzd_carbon_rules.yml")
+        settings._bgc_tracers_path = os.path.join(BASE_PATH, "npzd_carbon_tracers.yml")
 
         with open(settings._bgc_tracers_path) as f:
             settings.number_of_tracers = len(list(yaml.load_all(f, Loader=SafeLoader)))

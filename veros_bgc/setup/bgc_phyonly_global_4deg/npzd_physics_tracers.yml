@@ -7,4 +7,5 @@
 name: po4
 class: NPZD_tracer
 description: Dissolved phosphate concentration
+unit: "mmol/m^3?"
 ...

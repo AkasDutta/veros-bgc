@@ -54,11 +54,11 @@ class GlobalFourDegreeBGC(VerosSetup):
         settings.enable_npzd = False
         settings.enable_carbon = False
 
-        with open(os.path.join(BASE_PATH, "npzd_physics_tracers.yml")) as f:
-            tracers = list(yaml.load_all(f, Loader=SafeLoader))
-        # with open(os.path.join(BASE_PATH, "npzd_physics.yml")) as f:
-        #    rules = yaml.load(f, Loader=SafeLoader)
-        settings._bgc_blueprint = (tracers, None)
+        settings._bgc_rules_path = os.path.join(BASE_PATH, "npzd_physics_rules.yml")
+        settings._bgc_tracers_path = os.path.join(BASE_PATH, "npzd_physics_tracers.yml")
+
+        with open(settings._bgc_tracers_path) as f:
+            settings.number_of_tracers = len(list(yaml.load_all(f, Loader=SafeLoader)))
 
         settings.bbio = 1.038
         settings.cbio = 1.0
