@@ -79,24 +79,36 @@ def prefix_parser(arg):
     """Maps strings beginning with "$" to variables bearing those names. Useful when loading
     data from a .yaml file"""
     if isinstance(arg, str):
-        if arg[0] == "$":
+        #We want to check for strings which should actually be
+        #names of objects in our namespace, not strings
+
+        if arg[0] == "$": #prefix for state attributes
             arg = arg[1:]
-            parsed = globals()[arg]
+            parsed = ("s", lambda state: vars(state)[arg])
+
+        elif arg[0] == "^":#prefix for tracers
+            arg = arg[1:]
+            parsed = ("f", lambda foodweb: foodweb.tracers[arg])
+        #See npzd_rules.py, rule.call() for how this is used
 
     elif isinstance(arg, list):
+        #Some arguments take a list of related entities,
+        # eg: list of tracers produced during excretion
         parsed = []
         for element in arg:
             parsed.append(prefix_parser(element))
 
     elif isinstance(arg, dict):
+        #Same logic as above, but for dictionaries
         parsed = {}
         for key in arg.keys():
             parsed_value = prefix_parser(arg[key])
             parsed[key] = parsed_value
 
     else:
+        #if we're using a string qua string, not as 
+        #the name of an object 
         parsed = arg
-
     return parsed
 
 
@@ -111,6 +123,8 @@ def parse_rules(state):
     ModelRules = {}
 
     for key in rules.keys():
+        #The first entry in rules.yml specifies binary criteria
+        #for the code to run: for example, the carbon cycle being on
         if key == "criteria":
             criteria = prefix_parser(rules[key])
             for criterion in criteria:
@@ -191,7 +205,7 @@ def set_foodweb(state, dtr_speed):
 
     ModelTracers = parse_tracers(state, dtr_speed)
 
-    ModelRules = parse_rules(state)
+    ModelRules = parse_rules(state, ModelTracers)
 
     # Created appropriated tracer objects using parameters . yaml file
     for tracer in ModelTracers:

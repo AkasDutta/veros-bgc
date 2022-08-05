@@ -8,14 +8,25 @@
 #Each rule is encoded by a function that must appear in 
 #RuleTemplates in `veros_bgc.core.npzd_rules.py`. The function argument 
 #should be its name as a string. However, the arguments of the function 
-#will be tracers in the model. Any such value, to be interpreted as a 
-#variable name, not a string, should be prefixed with a "$". This is not necessary
-#for function, source and sink, as these fields are supposed to store string keys
-#pointing to the actual names. They may be needed for criteria and arguments.
+#will be variables in the model, not strings. Any such value, to be interpreted as a 
+#state attribute name, not a string, should be prefixed with a "$", eg: to set
+#some field to the value state.settings.redfield_ratio_PN, we should use the syntax
+#some_field: $settings.refield_ratio_PN.
+
+#If the function takes a tracer as input, then those arguments
+#should be preficed with a "^", i.e, allocating 
+#foodweb.tracers[tracer_name] to some field can be formatted as
+#some_field: ^tracer_name
+
+#This is not necessary for the fields "function", "source" and "sink", 
+#as these fields are supposed to store string keys
+#pointing to the actual names. They may be needed for criteria 
+#and arguments.
 
 #Occasionally, a source or sink will not be a key pointing to any tracer in the model.
 #Such a "missing" source/sink should be named with the "~" prefix, so that a node corresponding
 #to no tracer may be illustrated in the foodweb diagram. These fields cannot be left empty.
+#TODO - currently ~-prefixed sources and sinks must be the sole source/sink for that rule
 
 #'''
 
@@ -27,11 +38,11 @@ criteria:
 npzd_basic_phytoplankton_grazing_cycle:
     function: grazing_cycle
     arguments:
-        prey: $phytoplankton
-        grazer: $zooplankton
-        remains: $detritus
+        prey: ^phytoplankton
+        grazer: ^zooplankton
+        remains: ^detritus
         nutrients: 
-            - $po4
+            - ^po4
         ratios:
             - $settings.redfield_ratio_PN
     source: phytoplankton
@@ -45,8 +56,8 @@ npzd_basic_phytoplankton_grazing_cycle:
 npzd_basic_phytoplankton_mortality:
     function: mortality
     arguments:
-        plankton: $phytoplankton
-        remains: $detritus
+        plankton: ^phytoplankton
+        remains: ^detritus
     source: phytoplankton
     sink: detritus
     label: Mortality
@@ -55,9 +66,9 @@ npzd_basic_phytoplankton_mortality:
 npzd_basic_phytoplankton_fast_recycling:
     function: recycling
     arguments:
-        plankton: $phytoplankton
+        plankton: ^phytoplankton
         nutrients: 
-            - $po4
+            - ^po4
         ratio:  
             - $settings.redfield_ratio_PN
     source: phytoplankton
@@ -68,11 +79,11 @@ npzd_basic_phytoplankton_fast_recycling:
 npzd_basic_zooplankton_grazing_cycle:
     function: grazing_cycle
     arguments:
-        prey: $zooplankton
-        grazer: $zooplankton
-        remains: $detritus
+        prey: ^zooplankton
+        grazer: ^zooplankton
+        remains: ^detritus
         nutrients:
-            - $po4
+            - ^po4
         ratios:
             - $settings.redfield_ratio_PN
     source: zooplankton
@@ -86,8 +97,8 @@ npzd_basic_zooplankton_grazing_cycle:
 npzd_basic_zooplankton_mortality:
     function: mortality
     arguments:
-        plankton: $zooplankton
-        remains: $detritus
+        plankton: ^zooplankton
+        remains: ^detritus
     source: zooplankton
     sink: detritus
     label: Mortality
@@ -97,11 +108,11 @@ npzd_basic_zooplankton_mortality:
 npzd_basic_detritus_grazing_cycle:
     function: grazing_cycle
     arguments:
-        prey: $detritus
-        grazer: $zooplankton
-        remains: $detritus
+        prey: ^detritus
+        grazer: ^zooplankton
+        remains: ^detritus
         nutrients:
-            - $po4
+            - ^po4
         ratios:
             - $settings.redfield_ratio_PN
     source: detritus
@@ -115,8 +126,8 @@ npzd_basic_detritus_grazing_cycle:
 npzd_basic_detritus_remineralization:
     function: recycling
     arguments:
-        plankton: $detritus
-        nutrient: $po4
+        plankton: ^detritus
+        nutrient: ^po4
         ratio: $settings.redfield_ratio_PN
     source: detritus
     sink: po4
@@ -127,8 +138,8 @@ npzd_basic_phytoplankton_primary_production:
     function: primary_production
     arguments:
         nutrients: 
-            - $po4
-        plankton: $phytoplankton
+            - ^po4
+        plankton: ^phytoplankton
         ratio: 
             - $settings.redfield_ratio_PN
     source: po4
@@ -139,8 +150,8 @@ npzd_basic_phytoplankton_primary_production:
 npzd_basic_detritus_bottom_remineralization:
     function: bottom_remineralization
     arguments:
-        source: $detritus
-        sink: $po4
+        source: ^detritus
+        sink: ^po4
         scale: $settings.redfield_ratio_PN
     source: detritus
     sink: po4

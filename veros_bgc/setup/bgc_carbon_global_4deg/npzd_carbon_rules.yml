@@ -1,21 +1,32 @@
 ---
 #'''
 # READ CAREFULLY
-#The following is a file containing rules for the npzd/carbon cycle model using 
+#The following is a file containing rules for the npzd + carbon cyle model using 
 #the Veros-bgc plugin. A rule is a biological/chemical interaction,
 #analogous to an edge in a food web diagram. 
 
 #Each rule is encoded by a function that must appear in 
 #RuleTemplates in `veros_bgc.core.npzd_rules.py`. The function argument 
 #should be its name as a string. However, the arguments of the function 
-#will be tracers in the model. Any such value, to be interpreted as a 
-#variable name, not a string, should be prefixed with a "$". This is not necessary
-#for function, source and sink, as these fields are supposed to store string keys
-#pointing to the actual names. They may be needed for criteria and arguments.
+#will be variables in the model, not strings. Any such value, to be interpreted as a 
+#state attribute name, not a string, should be prefixed with a "$", eg: to set
+#some field to the value state.settings.redfield_ratio_PN, we should use the syntax
+#some_field: $settings.refield_ratio_PN.
+
+#If the function takes a tracer as input, then those arguments
+#should be preficed with a "^", i.e, allocating 
+#foodweb.tracers[tracer_name] to some field can be formatted as
+#some_field: ^tracer_name
+
+#This is not necessary for the fields "function", "source" and "sink", 
+#as these fields are supposed to store string keys
+#pointing to the actual names. They may be needed for criteria 
+#and arguments.
 
 #Occasionally, a source or sink will not be a key pointing to any tracer in the model.
 #Such a "missing" source/sink should be named with the "~" prefix, so that a node corresponding
 #to no tracer may be illustrated in the foodweb diagram. These fields cannot be left empty.
+#TODO - currently ~-prefixed sources and sinks must be the sole source/sink for that rule
 
 #'''
 
@@ -27,15 +38,15 @@ criteria:
 npzd_carbon_phytoplankton_grazing_cycle:
     function: grazing_cycle
     arguments:
-        prey: $phytoplankton
-        grazer: $zooplankton
+        prey: ^phytoplankton
+        grazer: ^zooplankton
         remains: 
           #order matters
-          - $detritus
-          - $caco3
+          - ^detritus
+          - ^caco3
         nutrients: 
-            - $po4
-            - $dic
+            - ^po4
+            - ^dic
         ratios:
             - $settings.redfield_ratio_PN
             - $settings.redfield_ratio_CN
@@ -52,11 +63,11 @@ npzd_carbon_phytoplankton_grazing_cycle:
 npzd_carbon_phytoplankton_mortality:
     function: mortality
     arguments:
-        plankton: $phytoplankton
+        plankton: ^phytoplankton
         remains:
-        #This order matters: $detritus BEFORE $calcite
-        - $detritus
-        - $caco3
+        #This order matters: ^detritus BEFORE $calcite
+        - ^detritus
+        - ^caco3
     source: phytoplankton
     sink: detritus
     label: Mortality
@@ -64,12 +75,12 @@ npzd_carbon_phytoplankton_mortality:
 npzd_carbon_zooplankton_grazing:
     function: grazing_cycle
     arguments:
-        prey: $zooplankton
-        grazer: $zooplankton
-        remains: $detritus
+        prey: ^zooplankton
+        grazer: ^zooplankton
+        remains: ^detritus
         nutrients:
-            - $po4
-            - $dic
+            - ^po4
+            - ^dic
         ratios:
             - $settings.redfield_ratio_PN
             - $settings.redfield_ratio_CN
@@ -85,8 +96,8 @@ npzd_carbon_zooplankton_grazing:
 npzd_basic_zooplankton_mortality:
     function: mortality
     arguments:
-        plankton: $zooplankton
-        remains: $detritus
+        plankton: ^zooplankton
+        remains: ^detritus
     source: zooplankton
     sink: detritus
     label: Mortality
@@ -95,12 +106,12 @@ npzd_basic_zooplankton_mortality:
 npzd_carbon_detritus_grazing_cycle:
     function: grazing_cycle
     arguments:
-        prey: $detritus
-        grazer: $zooplankton
-        remains: $detritus
+        prey: ^detritus
+        grazer: ^zooplankton
+        remains: ^detritus
         nutrients:
-            - $po4
-            - $dic
+            - ^po4
+            - ^dic
         ratios:
             - $settings.redfield_ratio_PN
             - $settings.redfield_ratio_CN
@@ -116,8 +127,8 @@ npzd_carbon_detritus_grazing_cycle:
 npzd_basic_detritus_remineralization:
     function: recycling
     arguments:
-        plankton: $detritus
-        nutrient: $po4
+        plankton: ^detritus
+        nutrient: ^po4
         ratio: $settings.redfield_ratio_PN
     source: detritus
     sink: po4
@@ -127,8 +138,8 @@ npzd_basic_detritus_remineralization:
 npzd_basic_detritus_bottom_remineralization:
     function: bottom_remineralization
     arguments:
-        source: $detritus
-        sink: $po4
+        source: ^detritus
+        sink: ^po4
         scale: $settings.redfield_ratio_PN
     source: po4
     sink: detritus
@@ -138,8 +149,8 @@ npzd_basic_detritus_bottom_remineralization:
 npzd_carbon_flux:
     function: co2_surface_flux
     arguments:
-        co2: $co2
-        dic: $dic
+        co2: ^co2
+        dic: ^dic
     source: ~Atmosphere
     sink:  DIC
     boundary: SURFACE
@@ -150,9 +161,9 @@ npzd_carbon_primary_production_dic:
     function: primary_production
     arguments:
         nutrient: 
-            - $po4
-            - $dic
-        plankton: $phytoplankton
+            - ^po4
+            - ^dic
+        plankton: ^phytoplankton
         ratio:
             - $settings.redfield_ratio_PN
             - $settings.redfield_ratio_CN
@@ -165,11 +176,11 @@ npzd_carbon_primary_production_dic:
 npzd_carbon_phytoplankton_fast_recycling:
     function: recycling
     arguments:
-        plankton: $phytoplankton
+        plankton: ^phytoplankton
         nutrients: 
-          - $po4
-          - $dic
-       #  - $no3 -  this is not a nitrogen cycle model, so commented out
+          - ^po4
+          - ^dic
+       #  - ^no3 -  this is not a nitrogen cycle model, so commented out
         ratio:
           - $settings.redfield_ratio_PN
           - $settings.redfield_ratio_CN
@@ -185,9 +196,9 @@ npzd_carbon_phytoplankton_fast_recycling:
 npzd_carbon_calcite_production:
   function: carbon_calcite_production
   arguments:
-    dic: $dic
-    alk: $alk
-    calcite: $caco3
+    dic: ^dic
+    alk: ^alk
+    calcite: ^caco3
   source:
     - dic
     - alk
@@ -198,8 +209,8 @@ npzd_carbon_calcite_production:
 npzd_carbon_detritus_bottom_remineralization:
     function: bottom_remineralization
     arguments:
-        source: $detritus
-        sink: $dic
+        source: ^detritus
+        sink: ^dic
         scale: $settings.redfield_ratio_CN
     source: dic
     sink: detritus
@@ -209,8 +220,8 @@ npzd_carbon_detritus_bottom_remineralization:
 npzd_carbon_dic_alk:
   function: dic_alk_scale
   arguments:
-    DIC: $dic
-    alkalinity: $alk
+    DIC: ^dic
+    alkalinity: ^alk
   source: ~Equilibrium with DIC
   sink: alk
   label: Redistribution of alkalinity
@@ -219,10 +230,10 @@ npzd_carbon_dic_alk:
 npzd_carbon_redistribution_calcite:
   function: post_redistribute_calcite
   arguments:
-    calcite: $caco3
+    calcite: ^caco3
     tracers:
-      - $dic
-      - $alk
+      - ^dic
+      - ^alk
     ratios:
       - 1
       - 2
@@ -238,7 +249,7 @@ npzd_carbon_redistribution_calcite:
 pre_reset_calcite:
   function: pre_reset_calcite
   arguments:
-    calcite: $caco3
+    calcite: ^caco3
   source: caco3
   sink: ~calcite_redistribution
   label: Calcite reset

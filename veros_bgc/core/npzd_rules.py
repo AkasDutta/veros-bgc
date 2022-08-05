@@ -270,12 +270,16 @@ class Rule:
         return tuple([slice(None, None, None)] * 3)
 
     @veros_routine
-    def call(self, state):
-        vs = state.variables
-        settings = state.settings
+    def call(self, state, foodweb):
 
         lst = []
         for arg in RuleTemplates[self._function][1]:
+            val = self._arguments[arg]
+            if isinstance(val, tuple):
+                if val[0] == "s":
+                    self._arguments[arg] = val[1](state)
+                elif val[0] == "f":
+                    self._arguments[arg] = val[1](foodweb)
             lst.append(self._arguments[arg])
         updates = RuleTemplates[self._function][0](state, *lst)
         for key, value in updates.items():

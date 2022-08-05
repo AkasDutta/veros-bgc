@@ -45,7 +45,7 @@ def biogeochemistry(state, foodweb):
     #            stored as a list
 
     for pre_rule in foodweb.pre_rules:
-        updates = pre_rule.call()
+        updates = pre_rule.call(state, foodweb)
         boundary = pre_rule.boundary
         for key, value in updates.items():
             foodweb.tracers[key].temp = update_add(
@@ -134,7 +134,7 @@ def biogeochemistry(state, foodweb):
 
         # Gather all state updates
         npzd_updates = [
-            (rule.call(state), rule.boundary) for rule in foodweb.primary_rules
+            (rule.call(state, foodweb), rule.boundary) for rule in foodweb.primary_rules
         ]
 
         # perform updates
@@ -173,7 +173,7 @@ def biogeochemistry(state, foodweb):
             )
 
     # Post processesing or smoothing rules
-    post_results = [(rule.call(state), rule.boundary) for rule in foodweb.post_rules]
+    post_results = [(rule.call(state, foodweb), rule.boundary) for rule in foodweb.post_rules]
     post_modified = (
         []
     )  # we only want to reset values, which have actually changed for performance
