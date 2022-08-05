@@ -23,6 +23,6 @@ __VEROS_INTERFACE__ = dict(
     run_entrypoint=npzd,
     settings=SETTINGS,
     variables=VARIABLES,
-    diagnostics=[NPZDMonitor],
     dimensions={"bgc_tracers_idx": 0},
+    diagnostics=[NPZDMonitor],
 )
