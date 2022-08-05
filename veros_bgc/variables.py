@@ -15,7 +15,7 @@ VARIABLES = {
     ),
     "bgc_tracers": Variable(
         "All tracers",
-        lambda settings: T_GRID + TIMESTEPS + settings.number_of_tracers,
+        T_GRID + TIMESTEPS + "bgc_tracers_idx",
         "variable",
         "5D array of many 4D tracers; variable size of 5th Dimension",
         write_to_restart=True,

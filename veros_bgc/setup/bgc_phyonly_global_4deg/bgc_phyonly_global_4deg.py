@@ -60,6 +60,10 @@ class GlobalFourDegreeBGC(VerosSetup):
         with open(settings._bgc_tracers_path) as f:
             settings.number_of_tracers = len(list(yaml.load_all(f, Loader=SafeLoader)))
 
+        from veros.state import resize_dimension
+
+        resize_dimension(state, "bgc_tracer_idx", settings.number_of_tracers)
+
         settings.bbio = 1.038
         settings.cbio = 1.0
 

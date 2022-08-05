@@ -173,7 +173,9 @@ def biogeochemistry(state, foodweb):
             )
 
     # Post processesing or smoothing rules
-    post_results = [(rule.call(state, foodweb), rule.boundary) for rule in foodweb.post_rules]
+    post_results = [
+        (rule.call(state, foodweb), rule.boundary) for rule in foodweb.post_rules
+    ]
     post_modified = (
         []
     )  # we only want to reset values, which have actually changed for performance
@@ -333,8 +335,8 @@ def npzd(state):
     from .foodweb import get_foodweb
 
     foodweb = get_foodweb(state)
-
-    npzd_changes = biogeochemistry(state, foodweb)
+    if settings.enable_npzd:
+        npzd_changes = biogeochemistry(state, foodweb)
 
     """
     For vertical mixing

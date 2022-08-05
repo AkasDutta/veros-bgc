@@ -24,4 +24,5 @@ __VEROS_INTERFACE__ = dict(
     settings=SETTINGS,
     variables=VARIABLES,
     diagnostics=[NPZDMonitor],
+    dimensions={"bgc_tracers_idx": 0},
 )
