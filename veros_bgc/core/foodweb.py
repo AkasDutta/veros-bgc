@@ -267,7 +267,8 @@ class FoodWeb(nx.MultiDiGraph):
                 self.primary_rules.append(rule)
             if rule.group == "POST":
                 self.post_rules.append(rule)
-
+    def display(self):
+        
 
 def general_nutrient_limitation(nutrient, saturation_constant):
     """Nutrient limitation form for all nutrients"""

@@ -176,7 +176,7 @@ class Recyclable_tracer(NPZD_tracer):
     + All attributes held by super class
     """
 
-    _types = NPZD_tracer._types
+    _types = NPZD_tracer._types #Can't use `super()` in cls attributes
     _types["recycling_rate"] = float
 
     def __new__(cls, name, input_array, recycling_rate=0.0, **kwargs):
@@ -233,7 +233,7 @@ class Plankton(Recyclable_tracer):
     + All attributes held by super class
     """
 
-    _types = Recyclable_tracer._types
+    _types = Recyclable_tracer._types #Can't use `super()` in cls attributes
     _types["mortality_rate"] = float
     _types["calcite_producing"] = bool
 
@@ -284,7 +284,7 @@ class Phytoplankton(Plankton):
     + All attributes held by super class
     """
 
-    _types = Plankton._types
+    _types = Plankton._types #Can't use `super()` in cls attributes
     _types["growth_parameter"] = float
 
     def __new__(
@@ -397,7 +397,7 @@ class Zooplankton(Plankton):
     + All attributes held by super class
     """
 
-    _types = Plankton._types
+    _types = Plankton._types #Can't use `super()` in cls attributes
     _types["max_grazing"] = float
     _types["grazing_saturation_constant"] = float
     _types["grazing_preferences"] = dict

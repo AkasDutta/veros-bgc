@@ -1,26 +1,25 @@
 """
 Collection of rules to be used by the npzd module
 
-Rules should always take 3 arguments:
+Rules should always take at least 3 arguments:
     1. state -  the veros state object
-    2. Name of source tracer
-    3. Name of sink tracer
+    2. The source tracer (or list of tracers)
+    3. The sink tracer (or list of tracers)
+
+Where relevant, other information (such as the ratios in which to divide
+source biomass among sink tracers) may also be provided.
+
+This file defines functions which are archetypes of rules - eg: `recycling`
+A .yaml file is read during setup to construct concrete rules--see foodweb.y
+-- such as recycling detritus to dic or to po4. Each function returns a
+dictionary of updates the reelvant tracers. We also define a class Rule that
+consists of the function and metadata specifying when and in which grid cells
+it is to be called. The creation of concrete rules is caried out by initialising
+objects of this class.
+
+ToDo: Make a type check for the tracers supplied for various rules.
 """
-# PENDING CHANGE: Dicts of tracers - eg. settings.npzd_export -  are currently calling the associated arrays as settings.npzd_export[tracer].
-#                Replace this with settings.npzd_export[tracer].data
-# sloppy_feeding, grazing, excretion??
 
-
-# Plan: Store only rule archetypes here (eg: `recycling`)
-#      Create a .yml file with everything else (eg: fields for `recycling_to_no3`)
-#      Let the set_foodweb function -  which will be the setup_entrypoint - read this file
-#      and construct and register rules therefrom.
-
-# Advantages: Firstly, the question of group rules disappears; common rule groups will now
-#      become commonly used .yaml files. Secondly, the distinction between selecting and
-#      registering a rule becomes irrelevant, as we don't have every individual rule hard-coded
-#      Thirdly, it provides symmetry between the treatment of tracers and rules, i.e, nodes
-#      and edges in the foodweb.
 
 from veros import veros_routine
 from veros.core.operators import numpy as npx, at, update, update_add, update_multiply
