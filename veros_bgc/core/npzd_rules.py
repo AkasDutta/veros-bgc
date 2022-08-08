@@ -26,7 +26,7 @@ from veros import veros_routine
 from veros.core.operators import numpy as npx, at, update, update_add, update_multiply
 from collections import namedtuple
 
-from . import atmospherefluxes
+
 
 
 @veros_routine
@@ -163,6 +163,7 @@ def pre_reset_calcite(state, calcite):
 @veros_routine
 def co2_surface_flux(state, co2, dic):
     """Pre rule to add or remove DIC from surface layer"""
+    from . import atmospherefluxes
     vs = state.variables
 
     atmospherefluxes.carbon_flux(state)

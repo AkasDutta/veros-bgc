@@ -1,8 +1,8 @@
 from loguru import logger
 
-from veros.diagnostics.diagnostic import VerosDiagnostic
+from veros.diagnostics.base import VerosDiagnostic
 from veros.core.operators import numpy as npx, update, at, update_add, update_multiply
-from veros import veros_method
+from veros import veros_routine
 
 
 class NPZDMonitor(VerosDiagnostic):
@@ -26,7 +26,7 @@ class NPZDMonitor(VerosDiagnostic):
         self.po4_total = 0
         self.dic_total = 0
 
-    @veros_method
+    @veros_routine
     def initialize(self, state):
         vs = state.variables
         settings = state.settings
@@ -63,7 +63,7 @@ class NPZDMonitor(VerosDiagnostic):
     def diagnose(self, state):
         pass
 
-    @veros_method
+    @veros_routine
     def output(self, state):
         """
         Print NPZD interaction graph
