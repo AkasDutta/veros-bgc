@@ -17,7 +17,7 @@ from .core.npzd_tracers import TracerClasses
 
 BASE_PATH = os.path.dirname(os.path.realpath(__file__))
 DATA_FILES = veros.tools.get_assets(
-    "global_4deg", os.path.join(BASE_PATH, "assets.yml")
+    "global_4deg", os.path.join(BASE_PATH, "assets.json")
 )
 
 # To be able to register rules to the foodweb,

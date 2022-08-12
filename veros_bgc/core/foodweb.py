@@ -213,15 +213,36 @@ def set_foodweb(state, dtr_speed):
 
     for rule in ModelRules:
         # Create nodes not corresponding to tracers
-        if rule.source[0] == "~":
-            rule.source = rule.source[1:]
-            foodweb.add_node("*" + rule.source)
-        if rule.sink[0] == "~":
-            rule.sink = rule.sink[1:]
-            foodweb.add_node("*" + rule.sink)
-
-        # Add to foodweb:
-        foodweb.add_edge(rule.sink, rule.source, object=rule)
+        if  isinstance(rule.source, list):
+            sources = rule.source
+        else:
+            sources = [rule.source]
+        if isinstance(rule.sink, list):
+            sinks = rule.sink
+        else:
+            sinks = [rule.sink]
+        
+        for lst in [sources, sinks]:
+            for i, node in enumerate(lst):
+                if node[0]=="~":
+                    node = node[1:]
+                    if i == 0:
+                        node = node.upper()
+                    foodweb.add_node("*" + node)
+                    lst[i] = "*" + node
+        
+        #Add edge to foodweb:
+        rule_edges = [
+            (source, sink) 
+            for source in sources 
+            for sink in sinks
+            ]
+        for edge in rule_edges:
+            if edge[0].isupper() and edge[1].isupper():
+                desc = rule.label
+            else:
+                desc = ""
+            foodweb.add_edge(edge[0], edge[1], object=rule, label=desc)
 
     foodweb = FoodWeb(foodweb, state)
 
@@ -257,6 +278,10 @@ class FoodWeb(nx.MultiDiGraph):
                 self.deposits[node.name] = npx.zeros_like(node.temp)
             else:
                 self.flags[node] = 1
+            
+            if node.sinking_speed is not None:
+                self.add_node("*Bottom")
+                self.add_edge(node, "*Bottom", label = "sinking")
 
         for edge in self.edges:
             self.rules += edge.object
@@ -267,7 +292,18 @@ class FoodWeb(nx.MultiDiGraph):
                 self.primary_rules.append(rule)
             if rule.group == "POST":
                 self.post_rules.append(rule)
-    def display(self):
+
+    def summary(self):
+        display = nx.MultiDiGraph
+        nodes = [node.name for node in self.nodes]
+        for node in nodes:
+            display.add_node(node)
+        edges = []
+        for source, sink, data in self.edges(data=True):
+            if data["label"] != "":
+                display.add_edge(source, sink, obj = data["obj"])
+        return display
+
         
 
 def general_nutrient_limitation(nutrient, saturation_constant):
