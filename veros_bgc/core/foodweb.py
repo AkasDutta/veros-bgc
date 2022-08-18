@@ -34,7 +34,7 @@ def parse_tracers(state, dtr_speed):
     vs = state.variables
     settings = state.settings
 
-    path = settings._bgc_tracers_path
+    path = settings.bgc_tracers_path
     with open(path) as f:
         tracers = yaml.safe_load(f)
     ModelTracers = {}
@@ -117,7 +117,7 @@ def parse_rules(state):
     vs = state.variables
     settings = state.settings
 
-    path = settings._bgc_rules_path
+    path = settings.bgc_rules_path
     with open(path) as f:
         rules = yaml.safe_load(f)
     ModelRules = {}

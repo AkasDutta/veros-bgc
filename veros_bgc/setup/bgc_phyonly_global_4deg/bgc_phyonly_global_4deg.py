@@ -54,15 +54,11 @@ class GlobalFourDegreeBGC(VerosSetup):
         settings.enable_npzd = False
         settings.enable_carbon = False
 
-        settings._bgc_rules_path = os.path.join(BASE_PATH, "npzd_physics_rules.yml")
-        settings._bgc_tracers_path = os.path.join(BASE_PATH, "npzd_physics_tracers.yml")
+        settings.bgc_rules_path = os.path.join(BASE_PATH, "npzd_physics_rules.yml")
+        settings.bgc_tracers_path = os.path.join(BASE_PATH, "npzd_physics_tracers.yml")
 
-        with open(settings._bgc_tracers_path) as f:
-            settings.number_of_tracers = len(list(yaml.load_all(f, Loader=SafeLoader)))
-
-        from veros.state import resize_dimension
-
-        resize_dimension(state, "bgc_tracer_idx", settings.number_of_tracers)
+        with open(settings.bgc_tracers_path) as f:
+            settings.number_of_tracers = 1 + len(list(yaml.load_all(f, Loader=yaml.SafeLoader)))
 
         settings.bbio = 1.038
         settings.cbio = 1.0
@@ -143,7 +139,6 @@ class GlobalFourDegreeBGC(VerosSetup):
             ),
         )
 
-    @veros_routine
     def _read_forcing(self, var):
         with h5netcdf.File(DATA_FILES["forcing"], "r") as infile:
             var_obj = infile.variables[var]
@@ -228,20 +223,19 @@ class GlobalFourDegreeBGC(VerosSetup):
             "forc_iw_bottom",
             "forc_iw_surface",
             "zw",
-            "phytoplankton",
-            "zooplankton",
-            "detritus",
-            "po4",
-            "dic",
             "atmospheric_co2",
-            "alkalinity",
             "hSWS",
+            "bgc_tracers",
         ],
     )
     def set_initial_conditions(self, state):
 
         vs = state.variables
         settings = state.settings
+
+        from veros.state import resize_dimension
+
+        resize_dimension(state, "bgc_tracer_idx", settings.number_of_tracers)
 
         # initial conditions for T and S
 
@@ -299,30 +293,11 @@ class GlobalFourDegreeBGC(VerosSetup):
                 self._read_forcing("wind_energy") / settings.rho_0 * 0.2,
             )
 
-        if settings.enable_npzd:
-            phytoplankton = 0.14 * npx.exp(vs.zw / 100) * vs.maskT
-            zooplankton = 0.014 * npx.exp(vs.zw / 100) * vs.maskT
+        #initialise phosphate
 
-            vs.phytoplankton = update(
-                vs.phytoplankton, at[:, :, :, :], phytoplankton[..., npx.newaxis]
-            )
-            vs.zooplankton = update(
-                vs.zooplankton, at[:, :, :, :], zooplankton[..., npx.newaxis]
-            )
-            vs.detritus = update(
-                vs.detritus, at[:, :, :, :], 1e-4 * vs.maskT[..., npx.newaxis]
-            )
+        vs.bgc_tracers = update(vs.bgc_tracers, at[:, :, :, :, 0], 2.2)
+        vs.bgc_tracers = update_multiply(vs.bgc_tracers, at[:, :, :, :, 0], vs.maskT[..., npx.newaxis])
 
-            vs.po4 = update(vs.po4, at[:, :, :, :], 2.2)
-            vs.po4 = update_multiply(vs.po4, at[...], vs.maskT[..., npx.newaxis])
-
-        if settings.enable_carbon:
-            vs.dic = update(vs.dic, at[...], 2300 * vs.maskT[..., npx.newaxis])
-            vs.atmospheric_co2 = update(vs.atmospheric_co2, at[...], 280)
-            vs.alkalinity = update(
-                vs.alkalinity, at[...], 2400 * vs.maskT[..., npx.newaxis]
-            )
-            vs.hSWS = update(vs.hSWS, at[...], 5e-7)
 
     @veros_routine
     def set_forcing(self, state):

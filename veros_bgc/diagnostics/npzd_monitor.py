@@ -19,7 +19,7 @@ class NPZDMonitor(VerosDiagnostic):
         "node": "square",
     }
 
-    def __init__(self, setup):
+    def __init__(self):
         self.output_variables = []
         self.surface_out = []
         self.bottom_out = []

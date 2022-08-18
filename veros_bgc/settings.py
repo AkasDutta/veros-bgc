@@ -3,8 +3,8 @@ from veros.settings import Setting
 SETTINGS = {
     "enable_npzd": Setting(False, bool, ""),
     "enable_carbon": Setting(False, bool, ""),
-    "_bgc_rules_path": Setting("", str, "Filepath for rules"),
-    "_bgc_tracers_path": Setting("", str, "Filepath for tracers"),
+    "bgc_rules_path": Setting("", str, "Filepath for rules"),
+    "bgc_tracers_path": Setting("", str, "Filepath for tracers"),
     "number_of_tracers": Setting(0, int, "Total number of tracers"),
     "light_attenuation_water": Setting(0.04, float, "Light attenuation of water [1/m]"),
     "light_attenuation_ice": Setting(5.0, float, "Light attenuation of ice [1/m]"),
