@@ -1,3 +1,4 @@
+from types import NoneType
 from veros.variables import Variable
 from veros.core.operators import numpy as npx, update, at, update_add, update_multiply
 import networkx as nx
@@ -36,8 +37,8 @@ def parse_tracers(state, dtr_speed):
 
     path = settings.bgc_tracers_path
     with open(path) as f:
-        tracers = yaml.safe_load(f)
-    ModelTracers = {}
+        tracers = list(yaml.load_all(f, yaml.SafeLoader))
+    ModelTracers = dict({})
 
     for index, tracer in enumerate(tracers):
         Class = tracer["class"]
@@ -49,29 +50,38 @@ def parse_tracers(state, dtr_speed):
         cl = TracerClasses[Class]
         var = vs.bgc_tracers[:, :, :, :, index]
         ModelTracers[Name] = cl(Name, var)
-        vars(ModelTracers[Name])[index] = index
+        vars(ModelTracers[Name])["index"] = index
 
         # Check that attributes from bgc_blueprint are present in the tracer class
         UnknownAttributes = ""
         for key in tracer.keys():
-            if key not in vars(cl):
-                UnknownAttributes += f"{key}, "
+            if key == "class":
+                continue
+            if key not in cl.attrs:
+                UnknownAttributes += key + ", "
+            KnownAttributes = [term for term in cl.attrs]
         if UnknownAttributes != "":
             raise ValueError(
-                f"{UnknownAttributes} is/are unknown attributes of {tracer[Class]}"
+                f"{UnknownAttributes} is/are unknown attributes of {Class}. {KnownAttributes}"
             )
 
         for key in tracer.keys():
-            if key == "sinking_speed":
+            if key in ["class", "name", "index"]:
+                continue
+            elif key == "sinking_speed":
                 vars(ModelTracers[Name])[key] = dtr_speed
             else:
-                vars(ModelTracers[Name])[key] = tracer["key"]
+                vars(ModelTracers[Name])[key] = tracer[key]
 
         ModelTracers[Name].isvalid()
         # `isvalid()` will raise an error if a mandatory attribute is left blank; see
         # `npzd_tracers.py`. This would end the loop.
 
+
+    if not isinstance(ModelTracers, dict):
+        raise TypeError(f"ModelTracers is  {ModelTracers}")
     # All tracers have been initialised properly
+    
     return ModelTracers
 
 
@@ -119,7 +129,9 @@ def parse_rules(state):
 
     path = settings.bgc_rules_path
     with open(path) as f:
-        rules = yaml.safe_load(f)
+        rules = (yaml.load(f, Loader = yaml.SafeLoader))
+        if isinstance(rules, NoneType): #An empty file, used to test only advection
+            return {} #We return no rules
     ModelRules = {}
 
     for key in rules.keys():
@@ -194,7 +206,7 @@ def rule_constructor(state, InputRules):
         return OutputRules
 
 
-@memoize
+
 @veros_routine
 def set_foodweb(state, dtr_speed):
 
@@ -204,13 +216,15 @@ def set_foodweb(state, dtr_speed):
     foodweb = nx.MultiDiGraph()
 
     ModelTracers = parse_tracers(state, dtr_speed)
+    if not isinstance(ModelTracers, dict):
+        raise TypeError(f"ModelTracers is {ModelTracers}")
 
-    ModelRules = parse_rules(state, ModelTracers)
+    ModelRules = parse_rules(state)
 
-    # Created appropriated tracer objects using parameters . yaml file
-    for tracer in ModelTracers:
+    # Created appropriated tracer objects using parameters in.yaml file
+    for tracer in ModelTracers.values():
         foodweb.add_node(tracer)
-
+    
     for rule in ModelRules:
         # Create nodes not corresponding to tracers
         if  isinstance(rule.source, list):
@@ -321,12 +335,12 @@ def phosphate_limitation_phytoplankton(state, tracers):
         tracers["po4"], settings.saturation_constant_N * settings.redfield_ratio_PN
     )
 
-
+@memoize
 @veros_routine
 def get_foodweb(state):
     vs = state.variables
     settings = state.settings
     zw = vs.zw - vs.dzt  # bottom of grid box using dzt because dzw is weird
-    dtr_speed = (vs.wd0 + vs.mw * npx.where(-zw < vs.mwz, -zw, vs.mwz)) * vs.maskT
+    dtr_speed = (settings.wd0 + settings.mw * npx.where(-zw < settings.mwz, -zw, settings.mwz)) * vs.maskT
     foodweb = set_foodweb(state, dtr_speed)
     foodweb.limiting_functions["phytoplankton"] = [phosphate_limitation_phytoplankton]

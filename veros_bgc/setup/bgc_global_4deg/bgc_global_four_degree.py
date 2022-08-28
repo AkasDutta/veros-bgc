@@ -62,10 +62,6 @@ class GlobalFourDegreeBGC(VerosSetup):
         with open(settings.bgc_tracers_path) as f:
             settings.number_of_tracers = 1 + len(list(yaml.load_all(f, Loader=SafeLoader)))
 
-        from veros.state import resize_dimension
-
-        resize_dimension(state, "bgc_tracer_idx", settings.number_of_tracers)
-
         settings.bbio = 1.038
         settings.cbio = 1.0
 
@@ -244,7 +240,7 @@ class GlobalFourDegreeBGC(VerosSetup):
 
         from veros.state import resize_dimension
 
-        resize_dimension(state, "bgc_tracer_idx", settings.number_of_tracers)
+        resize_dimension(state, "bgc_tracers_idx", settings.number_of_tracers)
         
 
         # initial conditions for T and S
@@ -426,32 +422,13 @@ class GlobalFourDegreeBGC(VerosSetup):
         state.diagnostics["energy"].output_frequency = 360 * 86400.0
         state.diagnostics["energy"].sampling_frequency = 86400
 
-        snapshot_vars = [
-            "phytoplankton",
-            "zooplankton",
-            "detritus",
-            "po4",
-            "dic",
-            "alkalinity" "cflux",
-            "windspeed",
-            "hSWS",
-            "pCO2",
-            "dpCO2",
-            "co2star",
-            "dco2star",
-        ]
+        snapshot_vars = ["bgc_tracers"]
 
         for var in snapshot_vars:
             state.diagnostics["snapshot"].output_variables.append(var)
 
         average_vars = [
-            "phytoplankton",
-            "po4",
-            "zooplankton",
-            "detritus",
-            "wind_speed",
-            "dic",
-            "alkalinity",
+            "bgc_tracers",
             "temp",
             "salt",
             "u",
@@ -460,12 +437,6 @@ class GlobalFourDegreeBGC(VerosSetup):
             "surface_taux",
             "kappaH",
             "psi",
-            "rho",
-            "pCO2",
-            "dpCO2",
-            "dco2star",
-            "cflux",
-            "atmospheric_co2",
         ]
 
         state.diagnostics["averages"].output_variables = average_vars

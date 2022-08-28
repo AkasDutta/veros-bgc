@@ -41,14 +41,14 @@ def setupNPZD(state):
     vs = state.variables
     settings = state.settings
 
-    vs.bottom_mask[:, :, :] = (
-        npx.arange(vs.nz)[npx.newaxis, npx.newaxis, :]
-        == (vs.kbot - 1)[:, :, npx.newaxis]
-    )
-
-    zw = vs.zw - vs.dzt  # bottom of grid box using dzt because dzw is weird
-    dtr_speed = (vs.wd0 + vs.mw * npx.where(-zw < vs.mwz, -zw, vs.mwz)) * vs.maskT
-
     if settings.enable_npzd:
+        vs.bottom_mask[:, :, :] = (
+            npx.arange(settings.nz)[npx.newaxis, npx.newaxis, :]
+            == (vs.kbot - 1)[:, :, npx.newaxis]
+        )
+
+        zw = vs.zw - vs.dzt  # bottom of grid box using dzt because dzw is weird
+        
+
         if settings.enable_carbon:
             setup_carbon(state, zw)

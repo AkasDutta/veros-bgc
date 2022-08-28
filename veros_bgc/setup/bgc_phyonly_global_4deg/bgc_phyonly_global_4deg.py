@@ -235,7 +235,7 @@ class GlobalFourDegreeBGC(VerosSetup):
 
         from veros.state import resize_dimension
 
-        resize_dimension(state, "bgc_tracer_idx", settings.number_of_tracers)
+        resize_dimension(state, "bgc_tracers_idx", settings.number_of_tracers)
 
         # initial conditions for T and S
 
@@ -398,14 +398,13 @@ class GlobalFourDegreeBGC(VerosSetup):
         state.diagnostics["energy"].output_frequency = 360 * 86400.0
         state.diagnostics["energy"].sampling_frequency = 86400
 
-        snapshot_vars = ["po4", "windspeed"]
+        snapshot_vars = ["bgc_tracers"]
 
         for var in snapshot_vars:
             state.diagnostics["snapshot"].output_variables.append(var)
 
         average_vars = [
-            "po4",
-            "wind_speed",
+            "bgc_tracers",
             "temp",
             "salt",
             "u",

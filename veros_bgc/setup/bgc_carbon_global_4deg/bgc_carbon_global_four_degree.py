@@ -241,7 +241,7 @@ class GlobalFourDegreeBGC_Carbon(VerosSetup):
 
         from veros.state import resize_dimension
 
-        resize_dimension(state, "bgc_tracer_idx", settings.number_of_tracers)
+        resize_dimension(state, "bgc_tracers_idx", settings.number_of_tracers)
 
 
         # initial conditions for T and S
@@ -440,13 +440,9 @@ class GlobalFourDegreeBGC_Carbon(VerosSetup):
         state.diagnostics["energy"].sampling_frequency = 86400
 
         snapshot_vars = [
-            "phytoplankton",
-            "zooplankton",
-            "detritus",
-            "po4",
-            "dic",
-            "alkalinity" "cflux",
-            "windspeed",
+            "bgc_tracers",
+            "cflux",
+            "wind_speed",
             "hSWS",
             "pCO2",
             "dpCO2",
@@ -458,13 +454,8 @@ class GlobalFourDegreeBGC_Carbon(VerosSetup):
             state.diagnostics["snapshot"].output_variables.append(var)
 
         average_vars = [
-            "phytoplankton",
-            "po4",
-            "zooplankton",
-            "detritus",
+            "bgc_tracers",
             "wind_speed",
-            "dic",
-            "alkalinity",
             "temp",
             "salt",
             "u",

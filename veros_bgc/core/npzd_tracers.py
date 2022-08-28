@@ -1,6 +1,7 @@
 """
 Classes for npzd tracers
 """
+from types import NoneType
 from unittest.mock import NonCallableMagicMock
 from veros.core.operators import numpy as npx, update, at, update_add, update_multiply
 
@@ -60,6 +61,10 @@ class NPZD_tracer:
         "description": str,
     }
 
+    attrs = _types.keys()
+
+    optional_attributes = ["sinking_speed", "light_attenuation"]
+
     def __new__(
         cls,
         name,
@@ -78,6 +83,7 @@ class NPZD_tracer:
             obj.sinking_speed = sinking_speed
         if light_attenuation is not None:
             obj.light_attenuation = light_attenuation
+            
 
         obj.name = name
         obj.index = index
@@ -114,21 +120,26 @@ class NPZD_tracer:
         return Missing
 
     def check_types(self):
-        for att in self._types.keys():
-            if (
-                isinstance(self.__dict__(att), self._types[att])
-                or self.__dict__[att] is None
-            ):
+        for att in self.attrs:
+            if att not in vars(self).keys():
+                if att in self.optional_attributes:
+                    break
+                else:
+                    raise KeyError(f"{att} not recognised.")
+            if not isinstance(vars(self)[att], self._types[att]):
                 raise TypeError(
-                    f"{att} should be of type {self._type[att]}, not {type(self.__dict__(att))}"
+                    f"{att} should be of type {self._types[att]}, not {type(vars(self)[att])}"
                 )
+            else:
+                pass
 
     def isvalid(self):
         # TODO add TypeErrors
-        Missing = self.check_missing(self)
+        Missing = self.check_missing()
         if Missing != "":
             raise ValueError(f"The field(s) {Missing} are missing.")
-        self.check_types(self)
+        self.check_types()
+        pass
 
 
 #    def __array_finalize__(self, obj):
@@ -143,6 +154,8 @@ class NPZD_tracer:
 
 
 class Calcite(NPZD_tracer):
+    _types = NPZD_tracer._types.copy()
+    attrs = _types.keys()
     # Not augmenting _types as dprca is set by the code, not the user.
     def __new__(cls, name, input_array, dprca=0, **kwargs):
         obj = super().__new__(cls, name, input_array, **kwargs)
@@ -176,8 +189,10 @@ class Recyclable_tracer(NPZD_tracer):
     + All attributes held by super class
     """
 
-    _types = NPZD_tracer._types #Can't use `super()` in cls attributes
+    _types = NPZD_tracer._types.copy() #Can't use `super()` in cls attributes
     _types["recycling_rate"] = float
+
+    attrs = _types.keys()
 
     def __new__(cls, name, input_array, recycling_rate=0.0, **kwargs):
         obj = super().__new__(cls, name, input_array)
@@ -233,9 +248,11 @@ class Plankton(Recyclable_tracer):
     + All attributes held by super class
     """
 
-    _types = Recyclable_tracer._types #Can't use `super()` in cls attributes
+    _types = Recyclable_tracer._types.copy() #Can't use `super()` in cls attributes
     _types["mortality_rate"] = float
     _types["calcite_producing"] = bool
+
+    attrs = _types.keys()
 
     def __new__(
         cls, name, input_array, mortality_rate=0.0, calcite_producing=False, **kwargs
@@ -284,8 +301,10 @@ class Phytoplankton(Plankton):
     + All attributes held by super class
     """
 
-    _types = Plankton._types #Can't use `super()` in cls attributes
+    _types = Plankton._types.copy() #Can't use `super()` in cls attributes
     _types["growth_parameter"] = float
+
+    attrs = _types.keys
 
     def __new__(
         cls,
@@ -397,13 +416,15 @@ class Zooplankton(Plankton):
     + All attributes held by super class
     """
 
-    _types = Plankton._types #Can't use `super()` in cls attributes
+    _types = Plankton._types.copy() #Can't use `super()` in cls attributes
     _types["max_grazing"] = float
     _types["grazing_saturation_constant"] = float
     _types["grazing_preferences"] = dict
     _types["assimilation_efficiency"] = float
     _types["growth_efficiency"] = float
     _types["maximum_growth_temperature"] = float
+
+    attrs = _types.keys
 
     def __new__(
         cls,

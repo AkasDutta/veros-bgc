@@ -4,6 +4,8 @@ from veros.diagnostics.base import VerosDiagnostic
 from veros.core.operators import numpy as npx, update, at, update_add, update_multiply
 from veros import veros_routine
 
+from veros_bgc.core.foodweb import get_foodweb
+
 
 class NPZDMonitor(VerosDiagnostic):
     """Diagnostic monitoring nutrients and plankton concentrations"""
@@ -30,46 +32,62 @@ class NPZDMonitor(VerosDiagnostic):
     def initialize(self, state):
         vs = state.variables
         settings = state.settings
+        foodweb =  get_foodweb(state)
 
         cell_volume = (
             vs.area_t[2:-2, 2:-2, npx.newaxis]
             * vs.dzt[npx.newaxis, npx.newaxis, :]
             * vs.maskT[2:-2, 2:-2, :]
         )
+        
+        po4_sum = foodweb.tracers["po4"].data[2:-2, 2:-2, :, vs.tau]
+        #po4 is present in phyonly setup too
 
-        if settings.enable_npzd:
+        if settings.enable_npzd: #biological tracers contain some P
 
-            po4_sum = (
-                vs.phytoplankton[2:-2, 2:-2, :, vs.tau] * settings.redfield_ratio_PN
-                + vs.detritus[2:-2, 2:-2, :, vs.tau] * settings.redfield_ratio_PN
-                + vs.zooplankton[2:-2, 2:-2, :, vs.tau] * settings.redfield_ratio_PN
-                + vs.po4[2:-2, 2:-2, :, vs.tau]
-            )
-        else:
-            po4_sum = vs.po4[2:-2, 2:-2, :, vs.tau]
+            from core.npzd_tracers import Recyclable_tracer
 
+            for tracer in foodweb.tracers:
+                if isinstance(tracer, Recyclable_tracer):
+                    po4_sum = update_add(
+                        po4_sum,
+                        at[2:-2,2:-2,:, vs.tau],
+                        tracer.data*settings.Redfield_ratio_PN
+                    )
+        
         self.po4_total = npx.sum(po4_sum * cell_volume)
 
         if settings.enable_carbon:
-            dic_sum = (
-                vs.phytoplankton[2:-2, 2:-2, :, vs.tau] * settings.redfeld_ratio_CN
-                + vs.detritus[2:-2, 2:-2, :, vs.tau] * settings.redfeld_ratio_CN
-                + vs.zooplankton[2:-2, 2:-2, :, vs.tau] * settings.redfeld_ratio_CN
-                + vs.dic[2:-2, 2:-2, :, vs.tau]
-            )
+            #dic only active in carbon setup
 
+            dic_sum = foodweb.tracers["dic"].data[2:-2, 2:-2, :, vs.tau]
+            
+            from core.npzd_tracers import Recyclable_tracer
+
+            for tracer in foodweb.tracers: #Bio tracers contain some C
+                if isinstance(tracer, Recyclable_tracer):
+                    dic_sum = update_add(
+                        dic_sum,
+                        at[2:-2,2:-2,:, vs.tau],
+                        tracer.data*settings.Redfield_ratio_CN
+                    )
+            
             self.dic_total = npx.sum(dic_sum * cell_volume)
+
+        
 
     def diagnose(self, state):
         pass
 
     @veros_routine
-    def output(self, state, foodweb):
+    def output(self, state):
         """
         Print NPZD interaction graph
         """
         vs = state.variables
         settings = state.settings
+
+        foodweb = get_foodweb(state)
 
         # Will update the graph bit later
         if self.save_graph:
