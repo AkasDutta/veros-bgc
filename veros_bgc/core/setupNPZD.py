@@ -42,13 +42,13 @@ def setupNPZD(state):
     settings = state.settings
 
     if settings.enable_npzd:
-        vs.bottom_mask[:, :, :] = (
+        bottom_mask = (
             npx.arange(settings.nz)[npx.newaxis, npx.newaxis, :]
             == (vs.kbot - 1)[:, :, npx.newaxis]
         )
+        vs.bottom_mask = update(vs.bottom_mask, at[...], bottom_mask)
 
         zw = vs.zw - vs.dzt  # bottom of grid box using dzt because dzw is weird
-        
 
         if settings.enable_carbon:
             setup_carbon(state, zw)

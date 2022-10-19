@@ -5,6 +5,8 @@ from types import NoneType
 from unittest.mock import NonCallableMagicMock
 from veros.core.operators import numpy as npx, update, at, update_add, update_multiply
 
+from loguru import logger
+
 from veros import veros_routine
 
 
@@ -54,14 +56,14 @@ class NPZD_tracer:
     _types = {
         "name": str,
         "index": int,
-        "sinking_speed": float,
+        "sinking_speed": npx.ndarray,
         "unit": str,
         "light_attenuation": float,
         "transport": bool,
         "description": str,
     }
 
-    attrs = _types.keys()
+    attrs = [key for key in _types.keys()]
 
     optional_attributes = ["sinking_speed", "light_attenuation"]
 
@@ -83,14 +85,16 @@ class NPZD_tracer:
             obj.sinking_speed = sinking_speed
         if light_attenuation is not None:
             obj.light_attenuation = light_attenuation
-            
 
         obj.name = name
         obj.index = index
         obj.data = input_array
         obj.transport = transport
         obj.unit = unit
-        obj.description = description
+        if description is None:
+            obj.description = ""
+        else:
+            obj.description = description
         obj.temp = npx.zeros_like(obj.data[:, :, :])
         obj.flag = True  # Defaults to true
 
@@ -117,6 +121,13 @@ class NPZD_tracer:
             Missing += "transport, "
         if self.description is None:
             Missing += "description, "
+
+        if hasattr(self, "light_attenuation") and self.light_attenuation is None:
+            delattr(self, "light_attenuation")
+
+        if hasattr(self, "sinking_speed") and self.sinking_speed is None:
+            delattr(self, "sinking_speed")
+
         return Missing
 
     def check_types(self):
@@ -135,11 +146,11 @@ class NPZD_tracer:
 
     def isvalid(self):
         # TODO add TypeErrors
+        name = self.name
         Missing = self.check_missing()
         if Missing != "":
-            raise ValueError(f"The field(s) {Missing} are missing.")
+            raise ValueError(f"{name}: The field(s) {Missing} are missing.")
         self.check_types()
-        pass
 
 
 #    def __array_finalize__(self, obj):
@@ -155,7 +166,7 @@ class NPZD_tracer:
 
 class Calcite(NPZD_tracer):
     _types = NPZD_tracer._types.copy()
-    attrs = _types.keys()
+    attrs = [key for key in _types.keys()]
     # Not augmenting _types as dprca is set by the code, not the user.
     def __new__(cls, name, input_array, dprca=0, **kwargs):
         obj = super().__new__(cls, name, input_array, **kwargs)
@@ -189,10 +200,10 @@ class Recyclable_tracer(NPZD_tracer):
     + All attributes held by super class
     """
 
-    _types = NPZD_tracer._types.copy() #Can't use `super()` in cls attributes
+    _types = NPZD_tracer._types.copy()  # Can't use `super()` in cls attributes
     _types["recycling_rate"] = float
 
-    attrs = _types.keys()
+    attrs = [key for key in _types.keys()]
 
     def __new__(cls, name, input_array, recycling_rate=0.0, **kwargs):
         obj = super().__new__(cls, name, input_array)
@@ -210,9 +221,10 @@ class Recyclable_tracer(NPZD_tracer):
         return vs.bct * self.recycling_rate * self.temp
 
     def check_missing(self):
-        Missing = super().check_missing(self)
+        Missing = super().check_missing()
         if self.recycling_rate is None:
             Missing += "recycling_rate, "
+        return Missing
 
 
 class Plankton(Recyclable_tracer):
@@ -248,11 +260,11 @@ class Plankton(Recyclable_tracer):
     + All attributes held by super class
     """
 
-    _types = Recyclable_tracer._types.copy() #Can't use `super()` in cls attributes
+    _types = Recyclable_tracer._types.copy()  # Can't use `super()` in cls attributes
     _types["mortality_rate"] = float
     _types["calcite_producing"] = bool
 
-    attrs = _types.keys()
+    attrs = [key for key in _types.keys()]
 
     def __new__(
         cls, name, input_array, mortality_rate=0.0, calcite_producing=False, **kwargs
@@ -271,9 +283,10 @@ class Plankton(Recyclable_tracer):
         return self.temp * self.mortality_rate
 
     def check_missing(self):
-        Missing = super().check_missing(self)
+        Missing = super().check_missing()
         if self.mortality is None:
             Missing += "mortality, "
+        return Missing
 
 
 class Phytoplankton(Plankton):
@@ -301,10 +314,10 @@ class Phytoplankton(Plankton):
     + All attributes held by super class
     """
 
-    _types = Plankton._types.copy() #Can't use `super()` in cls attributes
+    _types = Plankton._types.copy()  # Can't use `super()` in cls attributes
     _types["growth_parameter"] = float
 
-    attrs = _types.keys
+    attrs = [key for key in _types.keys()]
 
     def __new__(
         cls,
@@ -356,9 +369,10 @@ class Phytoplankton(Plankton):
         return gd * (phi1 - phi2) / light_attenuation
 
     def check_missing(self):
-        Missing = super().check_missing(self)
+        Missing = super().check_missing()
         if self.growth_parameter is None:
             Missing += "growth_parameter, "
+        return Missing
 
 
 class Zooplankton(Plankton):
@@ -416,7 +430,7 @@ class Zooplankton(Plankton):
     + All attributes held by super class
     """
 
-    _types = Plankton._types.copy() #Can't use `super()` in cls attributes
+    _types = Plankton._types.copy()  # Can't use `super()` in cls attributes
     _types["max_grazing"] = float
     _types["grazing_saturation_constant"] = float
     _types["grazing_preferences"] = dict
@@ -424,7 +438,7 @@ class Zooplankton(Plankton):
     _types["growth_efficiency"] = float
     _types["maximum_growth_temperature"] = float
 
-    attrs = _types.keys
+    attrs = [key for key in _types.keys()]
 
     def __new__(
         cls,
@@ -438,7 +452,7 @@ class Zooplankton(Plankton):
         maximum_growth_temperature=20.0,
         **kwargs,
     ):
-        obj = super().__new__(cls, input_array, name, **kwargs)
+        obj = super().__new__(cls, name, input_array, **kwargs)
 
         obj.max_grazing = max_grazing
         obj.grazing_saturation_constant = grazing_saturation_constant
@@ -525,7 +539,7 @@ class Zooplankton(Plankton):
         return grazing, digestion, excretion, sloppy_feeding
 
     def check_missing(self):
-        Missing = super().check_missing(self)
+        Missing = super().check_missing()
         if self.max_grazing is None:
             Missing += "max_grazing, "
         if self.grazing_saturation_constant is None:
@@ -538,9 +552,10 @@ class Zooplankton(Plankton):
             Missing += "growth_efficiency, "
         if self.maximum_growth_temperature is None:
             Missing += "maximum_growth_temperature, "
+        return Missing
 
     def isvalid(self):
-        super().isvalid(self)
+        super().isvalid()
         if self.growth_efficiency < 0 or self.growth_efficiency > 1:
             raise ValueError("Growth efficiency should be in [0,1]")
         if self.assimilation_efficiency < 0 or self.assimilation_efficiency > 1:

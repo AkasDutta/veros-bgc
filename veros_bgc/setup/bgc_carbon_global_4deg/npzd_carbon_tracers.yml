@@ -12,7 +12,7 @@
 name: detritus
 class: Recyclable_tracer
 sinking_speed: #Left empty as it is computed from grid properties, not explicitly set
-recyling_rate: 0.0000010416  #0.09 / 86400 #[1/sec]
+recycling_rate: 0.0000010416  #0.09 / 86400 #[1/sec]
 unit: "mmol/m^3?"
 ...
 

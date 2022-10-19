@@ -9,12 +9,12 @@
 #RuleTemplates in `veros_bgc.core.npzd_rules.py`. The function argument 
 #should be its name as a string. However, the arguments of the function 
 #will be variables in the model, not strings. Any such value, to be interpreted as a 
-#state attribute name, not a string, should be prefixed with a "$", eg: to set
+#settings attribute name, not a string, should be prefixed with a "$", eg: to set
 #some field to the value state.settings.redfield_ratio_PN, we should use the syntax
-#some_field: $settings.refield_ratio_PN.
+#some_field: $refield_ratio_PN.
 
 #If the function takes a tracer as input, then those arguments
-#should be preficed with a "^", i.e, allocating 
+#should be prefixed with a "^", i.e, allocating 
 #foodweb.tracers[tracer_name] to some field can be formatted as
 #some_field: ^tracer_name
 
@@ -32,8 +32,8 @@
 
 criteria:
     #Each of the elements below should be True for the rules to be registered
-  - $settings.enable_npzd
-  - $settings.enable_carbon
+  - $enable_npzd
+  - $enable_carbon
 
 npzd_carbon_phytoplankton_grazing_cycle:
     function: grazing_cycle
@@ -48,8 +48,8 @@ npzd_carbon_phytoplankton_grazing_cycle:
             - ^po4
             - ^dic
         ratios:
-            - $settings.redfield_ratio_PN
-            - $settings.redfield_ratio_CN
+            - $redfield_ratio_PN
+            - $redfield_ratio_CN
     source: phytoplankton
     sink: 
         - zooplankton
@@ -82,8 +82,8 @@ npzd_carbon_zooplankton_grazing:
             - ^po4
             - ^dic
         ratios:
-            - $settings.redfield_ratio_PN
-            - $settings.redfield_ratio_CN
+            - $redfield_ratio_PN
+            - $redfield_ratio_CN
     source: zooplankton
     sink: 
         - zooplankton
@@ -113,8 +113,8 @@ npzd_carbon_detritus_grazing_cycle:
             - ^po4
             - ^dic
         ratios:
-            - $settings.redfield_ratio_PN
-            - $settings.redfield_ratio_CN
+            - $redfield_ratio_PN
+            - $redfield_ratio_CN
     source: detritus
     sink: 
         - zooplankton
@@ -129,7 +129,7 @@ npzd_basic_detritus_remineralization:
     arguments:
         plankton: ^detritus
         nutrient: ^po4
-        ratio: $settings.redfield_ratio_PN
+        ratio: $redfield_ratio_PN
     source: detritus
     sink: po4
     label: Remineralization
@@ -140,7 +140,7 @@ npzd_basic_detritus_bottom_remineralization:
     arguments:
         source: ^detritus
         sink: ^po4
-        scale: $settings.redfield_ratio_PN
+        scale: $redfield_ratio_PN
     source: po4
     sink: detritus
     boundry: BOTTOM
@@ -165,8 +165,8 @@ npzd_carbon_primary_production_dic:
             - ^dic
         plankton: ^phytoplankton
         ratio:
-            - $settings.redfield_ratio_PN
-            - $settings.redfield_ratio_CN
+            - $redfield_ratio_PN
+            - $redfield_ratio_CN
     source: 
       - po4
       - dic
@@ -182,14 +182,14 @@ npzd_carbon_phytoplankton_fast_recycling:
           - ^dic
        #  - ^no3 -  this is not a nitrogen cycle model, so commented out
         ratio:
-          - $settings.redfield_ratio_PN
-          - $settings.redfield_ratio_CN
+          - $redfield_ratio_PN
+          - $redfield_ratio_CN
       #   - 1 - no ratio needed; already in terms of N
     source: phytoplankton
     sink: 
       - po4
       - DIC
-    label: Fast recyling
+    label: Fast recycling
 
 
 
@@ -211,7 +211,7 @@ npzd_carbon_detritus_bottom_remineralization:
     arguments:
         source: ^detritus
         sink: ^dic
-        scale: $settings.redfield_ratio_CN
+        scale: $redfield_ratio_CN
     source: dic
     sink: detritus
     boundry: BOTTOM

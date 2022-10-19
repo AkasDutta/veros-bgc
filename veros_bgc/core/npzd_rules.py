@@ -26,8 +26,6 @@ from veros.core.operators import numpy as npx, at, update, update_add, update_mu
 from collections import namedtuple
 
 
-
-
 @veros_routine
 def empty_rule(*args):
     """An empty rule for providing structure"""
@@ -163,6 +161,7 @@ def pre_reset_calcite(state, calcite):
 def co2_surface_flux(state, co2, dic):
     """Pre rule to add or remove DIC from surface layer"""
     from . import atmospherefluxes
+
     vs = state.variables
 
     atmospherefluxes.carbon_flux(state)
@@ -205,8 +204,11 @@ RuleTemplates = {
     "empty_rule": (empty_rule, []),
     "primary_production": (primary_production, ["nutrients", "plankton", "ratio"]),
     "recycling": (recycling, ["plankton", "nutrients", "ratio"]),
-    "mortality": (mortality, ["plankton", "detritus"]),
-    "grazing_cycle": (grazing_cycle, ["eaten", "zooplankton"]),
+    "mortality": (mortality, ["plankton", "remains"]),
+    "grazing_cycle": (
+        grazing_cycle,
+        ["prey", "grazer", "remains", "nutrients", "ratios"],
+    ),
     "calcite_production": (calcite_production, ["plankton", "DIC", "alk", "calcite"]),
     "post_redistribute_calcite": (
         post_redistribute_calcite,

@@ -330,7 +330,8 @@ def npzd(state):
     # TODO: Dissipation on W-grid if necessary
 
     # common temperature factor determined according to b ** (cT)
-    vs.bct = settings.bbio ** (settings.cbio * vs.temp[:, :, :, vs.tau])
+    if settings.enable_npzd:
+        vs.bct = settings.bbio ** (settings.cbio * vs.temp[:, :, :, vs.tau])
 
     from .foodweb import get_foodweb
 
@@ -343,10 +344,19 @@ def npzd(state):
     """
 
     a_tri = allocate(state.dimensions, ("xt", "yt", "zt"), include_ghosts=False)
+    a_tri.flags.writeable = True
+
     b_tri = allocate(state.dimensions, ("xt", "yt", "zt"), include_ghosts=False)
+    b_tri.flags.writeable = True
+
     c_tri = allocate(state.dimensions, ("xt", "yt", "zt"), include_ghosts=False)
+    c_tri.flags.writeable = True
+
     d_tri = allocate(state.dimensions, ("xt", "yt", "zt"), include_ghosts=False)
+    d_tri.flags.writeable = True
+
     delta = allocate(state.dimensions, ("xt", "yt", "zt"), include_ghosts=False)
+    delta.flags.writeable = True
 
     ks = vs.kbot[2:-2, 2:-2] - 1
     delta[:, :, :-1] = (
@@ -427,7 +437,7 @@ def npzd(state):
 
             tracer_update = isoneutral.diffusion.isoneutral_diffusion_tracer(
                 state, tracer_data, dtracer_iso, iso=True, skew=False
-            )
+            )[0]
 
             vs.bgc_tracers = update(
                 vs.bgc_tracers,
@@ -439,7 +449,7 @@ def npzd(state):
                 dtracer_skew = npx.zeros_like(tracer_data[..., 0])
                 tracer_update = isoneutral.diffusion.isoneutral_diffusion_tracer(
                     state, tracer_data, dtracer_skew, iso=False, skew=True
-                )
+                )[0]
 
                 vs.bgc_tracers = update(
                     vs.bgc_tracers,
@@ -454,30 +464,30 @@ def npzd(state):
         # TODO: surface flux?
         # d_tri[:, :, -1] += surface_forcing
 
-        land_mask, water_mask, edge_mask = utilities.create_water_masks(ks)
-        sol, mask = utilities.solve_implicit(
+        land_mask, water_mask, edge_mask = utilities.create_water_masks(ks, settings.nz)
+        sol = utilities.solve_implicit(
             a_tri, b_tri, c_tri, d_tri, water_mask, edge_mask, b_edge=b_tri_edge
         )
 
         vs.bgc_tracers = update(
             vs.bgc_tracers,
             at[2:-2, 2:-2, :, vs.taup1, index],
-            mask * sol + npx.logical_not(mask) * tracer_data[2:-2, 2:-2, :, vs.taup1],
+            npx.where(water_mask, sol, tracer_data[2:-2, 2:-2, :, vs.taup1]),
         )
 
     # update by biogeochemical changes
+    if settings.enable_npzd:
+        for tracer, change in npzd_changes.items():
+            vs.bgc_tracers = update_add(
+                vs.bgc_tracers, at[:, :, :, vs.taup1, tracer.index], change
+            )
 
-    for tracer, change in npzd_changes.items():
-        vs.bgc_tracers = update_add(
-            vs.bgc_tracers, at[:, :, :, vs.taup1, tracer.index], change
-        )
+            # prepare next timestep with minimum tracer values
+            vs.bgc_tracers = update(
+                vs.bgc_tracers,
+                at[:, :, :, vs.taup1, tracer.index],
+                npx.maximum(tracer.data[:, :, :, vs.taup1], settings.trcmin * vs.maskT),
+            )
 
-        # prepare next timestep with minimum tracer values
-        vs.bgc_tracers = update(
-            vs.bgc_tracers,
-            at[:, :, :, vs.taup1, tracer.index],
-            npx.maximum(tracer.data[:, :, :, vs.taup1], settings.trcmin * vs.maskT),
-        )
-
-    for tracer in foodweb.tracers.values():
-        utilities.enforce_boundaries(tracer.data)
+        for tracer in foodweb.tracers.values():
+            utilities.enforce_boundaries(tracer.data)

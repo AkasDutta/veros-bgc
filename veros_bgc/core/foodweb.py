@@ -11,6 +11,8 @@ from .npzd_tracers import TracerClasses
 from .npzd_rules import RuleTemplates, Rule
 import functools
 
+from loguru import logger
+
 
 def memoize(func):
     """
@@ -30,7 +32,6 @@ def memoize(func):
     return inner
 
 
-@veros_routine
 def parse_tracers(state, dtr_speed):
     vs = state.variables
     settings = state.settings
@@ -74,80 +75,86 @@ def parse_tracers(state, dtr_speed):
                 vars(ModelTracers[Name])[key] = tracer[key]
 
         ModelTracers[Name].isvalid()
+        logger.diagnostic(f"Tracer {Name} of class {Class} has been set up.")
         # `isvalid()` will raise an error if a mandatory attribute is left blank; see
         # `npzd_tracers.py`. This would end the loop.
 
-
-    if not isinstance(ModelTracers, dict):
-        raise TypeError(f"ModelTracers is  {ModelTracers}")
     # All tracers have been initialised properly
-    
+    logger.diagnostic("All tracers initialised.")
     return ModelTracers
 
 
 def prefix_parser(arg):
-    """Maps strings beginning with "$" to variables bearing those names. Useful when loading
-    data from a .yaml file"""
+    """
+    Input: string, list/dict containing such strings
+    Output: (s/f,lambda fn): lambda from settings/foodweb to settings/tracer
+            bearing the name given as input string. Prefix 's'/'f' indicates
+            appropriate arg for lambda fn
+            Lists, dicts returned with strings switched for such tuples
+    Useful when loading data from a .yaml file
+    """
+
     if isinstance(arg, str):
-        #We want to check for strings which should actually be
-        #names of objects in our namespace, not strings
+        # We want to check for strings which should actually be
+        # names of objects in our namespace, not strings
 
-        if arg[0] == "$": #prefix for state attributes
+        if arg[0] == "$":  # prefix for settings attributes
             arg = arg[1:]
-            parsed = ("s", lambda state: vars(state)[arg])
+            parsed = ("s", lambda settings: vars(settings)[arg])
 
-        elif arg[0] == "^":#prefix for tracers
+        elif arg[0] == "^":  # prefix for tracers
             arg = arg[1:]
             parsed = ("f", lambda foodweb: foodweb.tracers[arg])
-        #See npzd_rules.py, rule.call() for how this is used
+        else:
+            parsed = arg
+        # See npzd_rules.py, rule.call() for how this is used
 
     elif isinstance(arg, list):
-        #Some arguments take a list of related entities,
+        # Some arguments take a list of related entities,
         # eg: list of tracers produced during excretion
         parsed = []
         for element in arg:
             parsed.append(prefix_parser(element))
 
     elif isinstance(arg, dict):
-        #Same logic as above, but for dictionaries
+        # Same logic as above, but for dictionaries
         parsed = {}
         for key in arg.keys():
             parsed_value = prefix_parser(arg[key])
             parsed[key] = parsed_value
 
-    else:
-        #if we're using a string qua string, not as 
-        #the name of an object 
-        parsed = arg
     return parsed
 
 
-@veros_routine
 def parse_rules(state):
     vs = state.variables
     settings = state.settings
 
     path = settings.bgc_rules_path
     with open(path) as f:
-        rules = (yaml.load(f, Loader = yaml.SafeLoader))
-        if isinstance(rules, NoneType): #An empty file, used to test only advection
-            return {} #We return no rules
+        rules = yaml.load(f, Loader=yaml.SafeLoader)
+        if isinstance(rules, NoneType):  # An empty file, used to test only advection
+            return {}  # We return no rules
     ModelRules = {}
 
     for key in rules.keys():
-        #The first entry in rules.yml specifies binary criteria
-        #for the code to run: for example, the carbon cycle being on
+        # The first entry in rules.yml specifies binary criteria
+        # for the code to run: for example, the carbon cycle being on
+
         if key == "criteria":
             criteria = prefix_parser(rules[key])
             for criterion in criteria:
-                if criterion is False:
+                if not criterion[1](settings):
                     raise ValueError(
                         f"The rules used in setup require that {criterion} be\
                         True, but it is set to False."
                     )
+            criteria_names = rules["criteria"]
+            logger.diagnostic(f"{criteria_names} parsed")
 
         elif isinstance(rules[key], dict):
             rule = rules[key]
+            logger.diagnostic(f"Recognised {key} as a rule")
             temp_rule = {}
 
             for att in rule.keys():
@@ -159,11 +166,11 @@ def parse_rules(state):
         else:
             raise ValueError(f"{key} is neither a rule nor the criteria.")
 
-        ModelRules = rule_constructor(state, ModelRules)
-        return ModelRules
+    ModelRules = rule_constructor(state, ModelRules)
+    logger.diagnostic(f"ModelRules: {ModelRules.keys()}")
+    return ModelRules
 
 
-@veros_routine
 def rule_constructor(state, InputRules):
 
     OutputRules = {}
@@ -182,7 +189,7 @@ def rule_constructor(state, InputRules):
 
         for el in list(rule["arguments"].keys()):
             func = rule["function"]
-            if el not in RuleTemplates["function"][1]:
+            if el not in RuleTemplates[func][1]:
                 raise KeyError(f"{func} does not take the argument {el}")
 
         if "boundary" not in rule.keys():
@@ -203,11 +210,9 @@ def rule_constructor(state, InputRules):
             rule["boundary"],
             rule["group"],
         )
-        return OutputRules
+    return OutputRules
 
 
-
-@veros_routine
 def set_foodweb(state, dtr_speed):
 
     vs = state.variables
@@ -216,6 +221,7 @@ def set_foodweb(state, dtr_speed):
     foodweb = nx.MultiDiGraph()
 
     ModelTracers = parse_tracers(state, dtr_speed)
+
     if not isinstance(ModelTracers, dict):
         raise TypeError(f"ModelTracers is {ModelTracers}")
 
@@ -224,10 +230,10 @@ def set_foodweb(state, dtr_speed):
     # Created appropriated tracer objects using parameters in.yaml file
     for tracer in ModelTracers.values():
         foodweb.add_node(tracer)
-    
-    for rule in ModelRules:
+
+    for rule in ModelRules.values():
         # Create nodes not corresponding to tracers
-        if  isinstance(rule.source, list):
+        if isinstance(rule.source, list):
             sources = rule.source
         else:
             sources = [rule.source]
@@ -235,37 +241,39 @@ def set_foodweb(state, dtr_speed):
             sinks = rule.sink
         else:
             sinks = [rule.sink]
-        
+
         for lst in [sources, sinks]:
             for i, node in enumerate(lst):
-                if node[0]=="~":
+                if node[0] == "~":
                     node = node[1:]
                     if i == 0:
                         node = node.upper()
                     foodweb.add_node("*" + node)
                     lst[i] = "*" + node
-        
-        #Add edge to foodweb:
-        rule_edges = [
-            (source, sink) 
-            for source in sources 
-            for sink in sinks
-            ]
+        foodweb.add_node("*Bottom")
+
+        # Add edge to foodweb:
+        rule_edges = [(source, sink) for source in sources for sink in sinks]
         for edge in rule_edges:
             if edge[0].isupper() and edge[1].isupper():
                 desc = rule.label
             else:
                 desc = ""
             foodweb.add_edge(edge[0], edge[1], object=rule, label=desc)
+        for node in foodweb.nodes:
+            if hasattr(node, "sinking_speed"):
+                foodweb.add_edge(node, "*Bottom", label="sinking")
+                logger.diagnostic(f"{node.name} to *Bottom")
 
-    foodweb = FoodWeb(foodweb, state)
+    foodweb = FoodWeb(foodweb)
+    return foodweb
 
 
 class FoodWeb(nx.MultiDiGraph):
-    def __init__(self):
+    def __init__(self, foodweb):
 
-        self.nodes = super().nodes
-        self.edges = super().edges
+        self.nodes = foodweb.nodes
+        self.edges = foodweb.edges
         self.tracers = {}
         self.transported_tracers = []
         self.npzd_advection_derivatives = {}
@@ -286,19 +294,18 @@ class FoodWeb(nx.MultiDiGraph):
                     self.npzd_advection_derivatives[node.name] = npx.zeros_like(
                         node.data
                     )
-                if node.light_attenuation is not None:
+                if hasattr(node, "light_attenuation"):
                     self.light_attenuators.append(node)
 
                 self.deposits[node.name] = npx.zeros_like(node.temp)
             else:
                 self.flags[node] = 1
-            
-            if node.sinking_speed is not None:
-                self.add_node("*Bottom")
-                self.add_edge(node, "*Bottom", label = "sinking")
 
         for edge in self.edges:
-            self.rules += edge.object
+            logger.diagnostic(edge)
+            # self.rules += self.edges[edge]["object"]
+        raise AttributeError()
+
         for rule in self.rules:
             if rule.group == "PRE":
                 self.pre_rules.append(rule)
@@ -315,10 +322,9 @@ class FoodWeb(nx.MultiDiGraph):
         edges = []
         for source, sink, data in self.edges(data=True):
             if data["label"] != "":
-                display.add_edge(source, sink, obj = data["obj"])
+                display.add_edge(source, sink, obj=data["obj"])
         return display
 
-        
 
 def general_nutrient_limitation(nutrient, saturation_constant):
     """Nutrient limitation form for all nutrients"""
@@ -335,12 +341,22 @@ def phosphate_limitation_phytoplankton(state, tracers):
         tracers["po4"], settings.saturation_constant_N * settings.redfield_ratio_PN
     )
 
+
 @memoize
-@veros_routine
 def get_foodweb(state):
     vs = state.variables
     settings = state.settings
+
     zw = vs.zw - vs.dzt  # bottom of grid box using dzt because dzw is weird
-    dtr_speed = (settings.wd0 + settings.mw * npx.where(-zw < settings.mwz, -zw, settings.mwz)) * vs.maskT
+    dtr_speed = (
+        settings.wd0 + settings.mw * npx.where(-zw < settings.mwz, -zw, settings.mwz)
+    ) * vs.maskT
     foodweb = set_foodweb(state, dtr_speed)
-    foodweb.limiting_functions["phytoplankton"] = [phosphate_limitation_phytoplankton]
+
+    for tracer in foodweb.tracers:
+        if isinstance(tracer, TracerClasses["Phytoplankton"]):
+            foodweb.limiting_functions[tracer.name] = [
+                phosphate_limitation_phytoplankton
+            ]
+
+    return foodweb
