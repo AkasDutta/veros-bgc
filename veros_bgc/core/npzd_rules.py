@@ -21,18 +21,18 @@ ToDo: Make a type check for the tracers supplied for various rules.
 """
 
 
-from veros import veros_routine
+from veros import veros_routine, veros_kernel
 from veros.core.operators import numpy as npx, at, update, update_add, update_multiply
 from collections import namedtuple
 
 
-@veros_routine
+@veros_kernel
 def empty_rule(*args):
     """An empty rule for providing structure"""
     return {}
 
 
-@veros_routine
+@veros_kernel
 def primary_production(state, nutrients, plankton, ratio):
     """Primary production: Growth by consumption of light and nutrients"""
     settings = state.settings
@@ -45,7 +45,7 @@ def primary_production(state, nutrients, plankton, ratio):
     return updates
 
 
-@veros_routine
+@veros_kernel
 def recycling(state, plankton, nutrients, ratio):
     """Plankton or detritus is recycled into nutrients
 
@@ -64,7 +64,7 @@ def recycling(state, plankton, nutrients, ratio):
     return updates
 
 
-@veros_routine
+@veros_kernel
 def mortality(state, plankton, remains):
     """All dead matter from plankton is converted to detritus"""
     settings = state.settings
@@ -84,11 +84,10 @@ def mortality(state, plankton, remains):
     return updates
 
 
-@veros_routine
+@veros_kernel
 def grazing_cycle(state, prey, grazer, remains, nutrients, ratios):
     vs = state.variables
     settings = state.settings
-    foodweb = state.foodweb
 
     grazed, digested, excreted, sloppy_feeding = grazer.grazing(state, prey)
 
@@ -111,7 +110,7 @@ def grazing_cycle(state, prey, grazer, remains, nutrients, ratios):
     return updates
 
 
-@veros_routine
+@veros_kernel
 def calcite_production(state, dic, alk, calcite):
     """Calcite is produced at a rate similar to detritus, i.e, pieces of calcite-producing
     plankton that fall as detritus are pieces of calcite.
@@ -131,12 +130,11 @@ def calcite_production(state, dic, alk, calcite):
     return {dic.name: -dprca, alk.name: -2 * dprca}
 
 
-@veros_routine
+@veros_kernel
 def post_redistribute_calcite(state, calcite, tracers, ratios):
     """Post rule to redistribute produced calcite"""
     vs = state.variables
     settings = state.settings
-    foodweb = settings.foodweb
 
     total_production = (calcite.temp * vs.dzt).sum(axis=2)
     redistributed_production = total_production[:, :, npx.newaxis] * vs.rcak
@@ -148,7 +146,7 @@ def post_redistribute_calcite(state, calcite, tracers, ratios):
     return updates
 
 
-@veros_routine
+@veros_kernel
 def pre_reset_calcite(state, calcite):
     """Pre rule to reset calcite production"""
     vs = state.variables
@@ -157,7 +155,7 @@ def pre_reset_calcite(state, calcite):
     return {calcite.name: -calcite.temp}
 
 
-@veros_routine
+@veros_kernel
 def co2_surface_flux(state, co2, dic):
     """Pre rule to add or remove DIC from surface layer"""
     from . import atmospherefluxes
@@ -169,7 +167,7 @@ def co2_surface_flux(state, co2, dic):
     return {dic.name: flux}  # NOTE we don't have an atmosphere, so this rules is a stub
 
 
-@veros_routine
+@veros_kernel
 def dic_alk_scale(state, dic, alkalinity):
     """Redistribute change in DIC as change in alkalinity"""
     vs = state.variables
@@ -180,7 +178,7 @@ def dic_alk_scale(state, dic, alkalinity):
     }
 
 
-@veros_routine
+@veros_kernel
 def bottom_remineralization(state, source, sink, scale):
     """Exported material falling through the ocean floor is converted to nutrients
 
@@ -195,9 +193,10 @@ def bottom_remineralization(state, source, sink, scale):
     """
     vs = state.variables
     settings = state.settings
-    foodweb = settings.foodweb
 
-    return {sink.name: foodweb.deposits[source.name] * scale}
+    # Bottom remineralisation rules have implicitly replaced the source
+    # tracer with the corresponding deposit (see this page ->Rule -> `call()`)
+    return {sink.name: source * scale}
 
 
 RuleTemplates = {
@@ -232,7 +231,7 @@ class Rule:
         sink,
         label=None,
         boundary=None,
-        group="Primary",
+        group="PRIMARY",
     ):
         vs = state.variables
         settings = state.settings
@@ -247,7 +246,6 @@ class Rule:
         self._arguments = arguments
         self.flag = npx.empty_like(vs.maskT)
 
-    @veros_routine
     def _get_boundary(self, state, boundary_string):
         """Return slice representing boundary
 
@@ -271,19 +269,43 @@ class Rule:
 
         return tuple([slice(None, None, None)] * 3)
 
-    @veros_routine
     def call(self, state, foodweb):
-
+        settings = state.settings
         lst = []
         for arg in RuleTemplates[self._function][1]:
             val = self._arguments[arg]
-            if isinstance(val, tuple):
-                if val[0] == "s":
-                    self._arguments[arg] = val[1](state)
-                elif val[0] == "f":
-                    self._arguments[arg] = val[1](foodweb)
+            # Replace strings with settings or foodweb objects
+            self._parse(state, foodweb, val, arg)
+
+            if isinstance(val, list):  # Parse strings contained in a list as above
+                for element in val:
+                    self._parse(state, foodweb, element, arg, lst=True)
+
             lst.append(self._arguments[arg])
         updates = RuleTemplates[self._function][0](state, *lst)
         for key, value in updates.items():
             updates[key] = update_multiply(value, at[...], self.flag)
         return updates
+
+    def _parse(self, state, foodweb, val, arg, lst=False):
+        settings = state.settings
+        if isinstance(val, tuple):
+            if lst:
+                self._arguments[arg] = []
+            if val[0] == "s":
+                if lst:
+                    self._arguments[arg].append(val[1](settings))
+                else:
+                    self._arguments[arg] = val[1](settings)
+
+            elif val[0] == "f":
+                if lst:
+                    self._arguments[arg].append(val[1](foodweb))
+                else:
+                    self._arguments[arg] = val[1](foodweb)
+
+                # Bottom remineralisation takes the source tracer's deposit as input:
+                # See deposits under npzd.py -> `biogeochemistry()`
+                if self._function == "bottom_remineralization" and arg == "source":
+                    source = self._arguments[arg]
+                    self._arguments[arg] = foodweb.deposits[source.name]

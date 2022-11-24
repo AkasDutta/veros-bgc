@@ -4,7 +4,7 @@ Contains veros methods for handling bio- and geochemistry
 """
 from collections import namedtuple
 
-from veros import veros_kernel, veros_routine, KernelOutput
+from veros import veros_kernel, veros_routine, KernelOutput, logger
 from veros import time
 from veros.core import diffusion, thermodynamics, utilities
 from veros.core import isoneutral
@@ -12,7 +12,6 @@ from veros.core.operators import numpy as npx, at, update, update_add, update_mu
 from veros.variables import allocate
 
 
-@veros_routine
 def biogeochemistry(state, foodweb):
     """Control function for integration of biogeochemistry
 
@@ -35,7 +34,7 @@ def biogeochemistry(state, foodweb):
         # tracer.temp is initially a 3D slice of tracer.data at time = tau
         # We will update it over the course of this function (many iterations of the short
         # dt_bio) and then return it to the main function to update tracer.datai
-        tracer.temp = tracer.reset_temp(state)
+        tracer.reset_temp(state)
 
         tracer.flag = vs.maskT.astype(npx.bool)
 
@@ -70,15 +69,15 @@ def biogeochemistry(state, foodweb):
             # and calculate primary production from that
             if hasattr(tracer, "potential_growth"):
                 # NOTE jmax and avej are NOT updated within bio loop
+                # WARNING: Hard-coded limiting functions dictionary
                 for growth_limiting_function in foodweb.limiting_functions[tracer.name]:
                     u = npx.minimum(u, growth_limiting_function(state, foodweb.tracers))
 
                 tracer.net_primary_production = (
-                    npx.minimum(avej[tracer.name], u * jmax[tracer.name]) * tracer.data
+                    npx.minimum(avej[tracer.name], u * jmax[tracer.name]) * tracer.temp
                 )
-
             if hasattr(tracer, "grazing"):
-                tracer.thetaZ = tracer.reset_thetaZ(state)
+                tracer.thetaZ = tracer.reset_thetaZ(state, foodweb)
 
             # We want to shift everything to rules
             # Iterate over all rules in foodweb. Evaluate flags of tracer nodes. If flags
@@ -110,7 +109,7 @@ def biogeochemistry(state, foodweb):
                 npzd_export = {}
                 npzd_import = {}
                 npzd_export[tracer.name] = (
-                    tracer.sinking_speed / vs.dzt * tracer * tracer.flag
+                    tracer.sinking_speed / vs.dzt * tracer.temp * tracer.flag
                 )
 
                 # Import is export from above scaled by the ratio of cell heights
@@ -138,15 +137,17 @@ def biogeochemistry(state, foodweb):
         ]
 
         # perform updates
-        for update, boundary in npzd_updates:
-            for key, value in update.items():
+        for change, boundary in npzd_updates:
+            for key, value in change.items():
                 if isinstance(boundary, (tuple, slice)):
                     foodweb.tracers[key].temp = update_add(
-                        foodweb.tracers[key].temp, at[boundary], value * vs.dt_bio
+                        foodweb.tracers[key].temp, at[boundary], value * settings.dt_bio
                     )
                 else:
-                    foodweb.tracers[key] = update_add(
-                        foodweb.tracers[key], at[...], value * vs.dt_bio * boundary
+                    foodweb.tracers[key].temp = update_add(
+                        foodweb.tracers[key].temp,
+                        at[...],
+                        value * settings.dt_bio * boundary,
                     )
 
         # Import and export between layers
@@ -156,7 +157,8 @@ def biogeochemistry(state, foodweb):
                 tracer.temp = update_add(
                     tracer.temp,
                     at[:, :, :],
-                    (npzd_import[tracer.name] - npzd_export[tracer.name]) * vs.dt_bio,
+                    (npzd_import[tracer.name] - npzd_export[tracer.name])
+                    * settings.dt_bio,
                 )
 
         # Prepare temporary tracers for next bio iteration
@@ -164,12 +166,12 @@ def biogeochemistry(state, foodweb):
             tracer.flag = update(
                 tracer.flag,
                 at[:, :, :],
-                npx.logical_and(tracer.flag, (tracer.temp > vs.trcmin)),
+                npx.logical_and(tracer.flag, (tracer.temp > settings.trcmin)),
             )
             tracer.temp = update(
                 tracer.temp,
                 at[:, :, :],
-                utilities.where(state, tracer.flag, tracer.temp, vs.trcmin),
+                npx.where(tracer.flag, tracer.temp, settings.trcmin),
             )
 
     # Post processesing or smoothing rules
@@ -209,7 +211,6 @@ def biogeochemistry(state, foodweb):
     }
 
 
-@veros_routine
 def PAR_distribution(state, foodweb):
     """
     Essentially calculates the amount of light at photosynthetically
@@ -228,13 +229,16 @@ def PAR_distribution(state, foodweb):
     # reverse cumulative sum because our top layer is the last.
     # Needs to be reversed again to reflect direction
 
-    integrated_plankton = {}
+    integrated_plankton = {
+        plankton.name: plankton.temp for plankton in light_attenuators
+    }
     for i, plankton in enumerate(light_attenuators):
         if i == 0:
-            light_extinction = npx.zeros_like(plankton.data)
+            light_extinction = npx.zeros_like(plankton.temp)
 
-        integrated_plankton[plankton.name] = npx.empty_like(plankton.data)
-        integrated_plankton[plankton.name][:, :, :-1] = plankton.data[:, :, 1:]
+        integrated_plankton[plankton.name] = npx.zeros_like(plankton.temp)
+        logger.diagnostic(type(plankton.temp))
+        integrated_plankton[plankton.name][:, :, :-1] = plankton.temp[:, :, 1:]
         integrated_plankton[plankton.name][:, :, -1] = 0.0
 
     # incoming shortwave radiation at top of layer
@@ -275,13 +279,20 @@ def PAR_distribution(state, foodweb):
     rctheta = npx.maximum(-1.5, npx.minimum(1.5, npx.radians(vs.yt) - declin))
 
     # 1.33 is derived from Snells law for the air-sea barrier
-    vs.rctheta[:] = settings.light_attenuation_water / npx.sqrt(
-        1.0 - (1.0 - npx.cos(rctheta) ** 2.0) / 1.33**2
+    vs.rctheta = update(
+        vs.rctheta,
+        at[:],
+        settings.light_attenuation_water
+        / npx.sqrt(1.0 - (1.0 - npx.cos(rctheta) ** 2.0) / 1.33**2),
     )
 
     # fraction of day with photosynthetically active radiation with a minimum value
     dayfrac = npx.minimum(1.0, -npx.tan(npx.radians(vs.yt)) * npx.tan(declin))
-    vs.dayfrac[:] = npx.maximum(1e-12, npx.arccos(npx.maximum(-1.0, dayfrac)) / npx.pi)
+    vs.dayfrac = update(
+        vs.dayfrac,
+        at[:],
+        npx.maximum(1e-12, npx.arccos(npx.maximum(-1.0, dayfrac)) / npx.pi),
+    )
 
     # light at top of grid box
     grid_light = swr * npx.exp(
@@ -290,7 +301,7 @@ def PAR_distribution(state, foodweb):
 
     # amount of PAR absorbed by water and plankton in each grid cell
     light_attenuation_plankton = sum(
-        [plankton.data * plankton.light_attenuation for plankton in light_attenuators]
+        [plankton.temp * plankton.light_attenuation for plankton in light_attenuators]
     )
     light_attenuation = (
         vs.dzt * settings.light_attenuation_water + light_attenuation_plankton
@@ -298,8 +309,8 @@ def PAR_distribution(state, foodweb):
 
     # light-saturated growth and non-saturated growth
     jmax, avej = {}, {}
-    for tracer in foodweb.tracers():
-
+    for tracer in foodweb.tracers.values():
+        logger.diagnostic(f"Name of tracer: {tracer}")
         # Calculate light-limited vs unlimited growth
         if hasattr(tracer, "potential_growth"):
             jmax[tracer.name], avej[tracer.name] = tracer.potential_growth(
@@ -490,4 +501,4 @@ def npzd(state):
             )
 
         for tracer in foodweb.tracers.values():
-            utilities.enforce_boundaries(tracer.data)
+            utilities.enforce_boundaries(tracer.data, settings.enable_cyclic_x)

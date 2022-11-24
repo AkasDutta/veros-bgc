@@ -13,7 +13,7 @@ from veros import veros_routine, veros_kernel, KernelOutput
 
 
 import veros_bgc
-from .core.npzd_tracers import TracerClasses
+from veros_bgc.core.npzd_tracers import TracerClasses
 
 BASE_PATH = os.path.dirname(os.path.realpath(__file__))
 DATA_FILES = veros.tools.get_assets(
@@ -40,7 +40,7 @@ class GlobalFourDegreeBGC_Carbon(VerosSetup):
     def set_parameter(self, state):
         settings = state.settings
 
-        settings.identifier = "4deg"  # Name of setup
+        settings.identifier = "4deg Carbon cycle"  # Name of setup
 
         # Specifications of grid dimensions and simulation timesteps
         settings.nx, settings.ny, settings.nz = 90, 40, 15

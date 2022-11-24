@@ -2,7 +2,8 @@ from types import NoneType
 from veros.variables import Variable
 from veros.core.operators import numpy as npx, update, at, update_add, update_multiply
 import networkx as nx
-from veros import veros_routine, veros_kernel, KernelOutput
+import copy
+from veros import logger, veros_routine, veros_kernel, KernelOutput
 
 from collections import namedtuple
 import ruamel.yaml as yaml
@@ -10,8 +11,6 @@ from yaml.loader import SafeLoader
 from .npzd_tracers import TracerClasses
 from .npzd_rules import RuleTemplates, Rule
 import functools
-
-from loguru import logger
 
 
 def memoize(func):
@@ -32,6 +31,7 @@ def memoize(func):
     return inner
 
 
+@veros_kernel
 def parse_tracers(state, dtr_speed):
     vs = state.variables
     settings = state.settings
@@ -126,6 +126,7 @@ def prefix_parser(arg):
     return parsed
 
 
+@veros_kernel
 def parse_rules(state):
     vs = state.variables
     settings = state.settings
@@ -154,7 +155,6 @@ def parse_rules(state):
 
         elif isinstance(rules[key], dict):
             rule = rules[key]
-            logger.diagnostic(f"Recognised {key} as a rule")
             temp_rule = {}
 
             for att in rule.keys():
@@ -167,10 +167,11 @@ def parse_rules(state):
             raise ValueError(f"{key} is neither a rule nor the criteria.")
 
     ModelRules = rule_constructor(state, ModelRules)
-    logger.diagnostic(f"ModelRules: {ModelRules.keys()}")
+    logger.diagnostic(f"The rules are: {list(ModelRules.keys())}")
     return ModelRules
 
 
+@veros_kernel
 def rule_constructor(state, InputRules):
 
     OutputRules = {}
@@ -197,7 +198,7 @@ def rule_constructor(state, InputRules):
         if "label" not in rule.keys():
             rule["label"] = None
         if "group" not in rule.keys():
-            rule["group"] = "Primary"
+            rule["group"] = "PRIMARY"
 
         OutputRules[index] = Rule(
             state,
@@ -213,6 +214,7 @@ def rule_constructor(state, InputRules):
     return OutputRules
 
 
+@veros_kernel
 def set_foodweb(state, dtr_speed):
 
     vs = state.variables
@@ -229,7 +231,8 @@ def set_foodweb(state, dtr_speed):
 
     # Created appropriated tracer objects using parameters in.yaml file
     for tracer in ModelTracers.values():
-        foodweb.add_node(tracer)
+        foodweb.add_node(tracer.name, tracer=tracer)
+    foodweb.add_node("*Bottom")
 
     for rule in ModelRules.values():
         # Create nodes not corresponding to tracers
@@ -246,24 +249,25 @@ def set_foodweb(state, dtr_speed):
             for i, node in enumerate(lst):
                 if node[0] == "~":
                     node = node[1:]
-                    if i == 0:
-                        node = node.upper()
-                    foodweb.add_node("*" + node)
                     lst[i] = "*" + node
-        foodweb.add_node("*Bottom")
 
         # Add edge to foodweb:
         rule_edges = [(source, sink) for source in sources for sink in sinks]
         for edge in rule_edges:
-            if edge[0].isupper() and edge[1].isupper():
-                desc = rule.label
+            if edge[0] == sources[0] and edge[1] == sinks[0]:
+                desc = rule.label  # The rule label is assigned to the
+                # primary source-sink pair
+                foodweb.add_edge(
+                    edge[0],
+                    edge[1],
+                    object=rule,
+                    label=desc,
+                    name=rule.name,
+                    key="to_display",
+                )
             else:
-                desc = ""
-            foodweb.add_edge(edge[0], edge[1], object=rule, label=desc)
-        for node in foodweb.nodes:
-            if hasattr(node, "sinking_speed"):
-                foodweb.add_edge(node, "*Bottom", label="sinking")
-                logger.diagnostic(f"{node.name} to *Bottom")
+                desc = rule.label
+                foodweb.add_edge(edge[0], edge[1], object=None, label=desc, key="leak")
 
     foodweb = FoodWeb(foodweb)
     return foodweb
@@ -285,44 +289,61 @@ class FoodWeb(nx.MultiDiGraph):
         self.post_rules = []
         self.primary_rules = []
         self.limiting_functions = {}
-        for node in self.nodes:
-            if type(node).__name__ in TracerClasses.keys():
-                self.tracers[node.name] = node
-                self.flags[node] = node.flag
-                if node.transport:
-                    self.transported_tracers.append(node)
-                    self.npzd_advection_derivatives[node.name] = npx.zeros_like(
-                        node.data
-                    )
-                if hasattr(node, "light_attenuation"):
-                    self.light_attenuators.append(node)
+        for node, tracer in list(self.nodes(data="tracer")):
+            if tracer is not None:
+                self.tracers[node] = tracer
+                self.flags[node] = tracer.flag
+                if tracer.transport:
+                    self.transported_tracers.append(tracer)
+                    self.npzd_advection_derivatives[node] = npx.zeros_like(tracer.data)
+                if hasattr(tracer, "light_attenuation"):
+                    self.light_attenuators.append(tracer)
 
-                self.deposits[node.name] = npx.zeros_like(node.temp)
+                self.deposits[node] = npx.zeros_like(tracer.temp)
             else:
                 self.flags[node] = 1
 
-        for edge in self.edges:
-            logger.diagnostic(edge)
-            # self.rules += self.edges[edge]["object"]
-        raise AttributeError()
+        for a, b, data in list(self.edges.data()):
+            if data["object"] is not None:
+                self.rules[data["name"]] = data["object"]
 
-        for rule in self.rules:
+        for rule in self.rules.values():
+            logger.diagnostic(f"Rule: {rule.name}")
             if rule.group == "PRE":
                 self.pre_rules.append(rule)
             if rule.group == "PRIMARY":
                 self.primary_rules.append(rule)
             if rule.group == "POST":
                 self.post_rules.append(rule)
+        logger.diagnostic(
+            f"PRE:{self.pre_rules}; PRIMARY: {self.primary_rules};\
+             POST: {self.post_rules}"
+        )
 
     def summary(self):
-        display = nx.MultiDiGraph
-        nodes = [node.name for node in self.nodes]
-        for node in nodes:
+        """
+        Removes leaks to simplify display. Eg: Zooplankton
+        grazing on phytoplankton takes up most food as biomass,
+        but leaks some to detritus, po4, etc. Only show
+        Phytoplankton->Zooplankton on the foodweb graph display
+        for simplicity.
+        """
+        display = nx.MultiDiGraph()
+        logger.diagnostic(list(self.nodes))
+        for node in list(self.nodes):
             display.add_node(node)
-        edges = []
-        for source, sink, data in self.edges(data=True):
-            if data["label"] != "":
-                display.add_edge(source, sink, obj=data["obj"])
+
+        for edge in list(self.edges.data()):
+            logger.diagnostic(edge[2])
+            if "key" in edge[2].keys() and edge[2]["key"] == "to_display":
+                display.add_edge(
+                    edge[0],
+                    edge[1],
+                    object=edge[2]["object"],
+                    label=edge[2]["label"],
+                    name=edge[2]["name"],
+                )
+
         return display
 
 
@@ -331,7 +352,6 @@ def general_nutrient_limitation(nutrient, saturation_constant):
     return nutrient.temp / (saturation_constant + nutrient.temp)
 
 
-@veros_routine
 def phosphate_limitation_phytoplankton(state, tracers):
     """Phytoplankton limit to growth by phosphate limitation"""
     vs = state.variables
@@ -353,7 +373,7 @@ def get_foodweb(state):
     ) * vs.maskT
     foodweb = set_foodweb(state, dtr_speed)
 
-    for tracer in foodweb.tracers:
+    for tracer in foodweb.tracers.values():
         if isinstance(tracer, TracerClasses["Phytoplankton"]):
             foodweb.limiting_functions[tracer.name] = [
                 phosphate_limitation_phytoplankton

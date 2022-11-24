@@ -202,21 +202,24 @@ class Recyclable_tracer(NPZD_tracer):
 
     _types = NPZD_tracer._types.copy()  # Can't use `super()` in cls attributes
     _types["recycling_rate"] = float
+    _types["calcite_producing"] = bool
 
     attrs = [key for key in _types.keys()]
 
-    def __new__(cls, name, input_array, recycling_rate=0.0, **kwargs):
+    def __new__(
+        cls, name, input_array, recycling_rate=0.0, calcite_producing=False, **kwargs
+    ):
         obj = super().__new__(cls, name, input_array)
         obj.recycling_rate = recycling_rate
+        obj.calcite_producing = calcite_producing
         return obj
 
-    @veros_routine
     def recycle(self, state):
         """
         Recycling is temperature dependant by :obj:`vs.bct`
         """
         vs = state.variables
-        settings = self.settings
+        settings = state.settings
 
         return vs.bct * self.recycling_rate * self.temp
 
@@ -262,19 +265,14 @@ class Plankton(Recyclable_tracer):
 
     _types = Recyclable_tracer._types.copy()  # Can't use `super()` in cls attributes
     _types["mortality_rate"] = float
-    _types["calcite_producing"] = bool
 
     attrs = [key for key in _types.keys()]
 
-    def __new__(
-        cls, name, input_array, mortality_rate=0.0, calcite_producing=False, **kwargs
-    ):
+    def __new__(cls, name, input_array, mortality_rate=0.0, **kwargs):
         obj = super().__new__(cls, name, input_array, **kwargs)
         obj.mortality_rate = mortality_rate
-        obj.calcite_producing = calcite_producing
         return obj
 
-    @veros_routine
     def mortality(self, state):
         """
         The mortality rate scales linearly with population size
@@ -333,7 +331,6 @@ class Phytoplankton(Plankton):
 
         return obj
 
-    @veros_routine
     def potential_growth(self, state, grid_light, light_attenuation):
         """Light limited growth, not limited growth"""
         vs = state.variables
@@ -348,7 +345,6 @@ class Phytoplankton(Plankton):
 
         return jmax, avej
 
-    @veros_routine
     def _avg_J(self, state, f1, gd, grid_light, light_attenuation):
         """Average light over a triuneral cycle
 
@@ -478,17 +474,15 @@ class Zooplankton(Plankton):
             * npx.minimum(self.maximum_growth_temperature, vs.temp[..., vs.tau])
         )
 
-    @veros_routine
     def mortality(self, state):
         """
         Zooplankton is modelled with a quadratic mortality
         """
         return self.mortality_rate * self.temp**2
 
-    @veros_routine
-    def reset_thetaZ(self, state):
+    def reset_thetaZ(self, state, foodweb):
         settings = state.settings
-        tracers = settings.foodweb.tracers
+        tracers = foodweb.tracers
 
         return (
             sum(
@@ -497,10 +491,9 @@ class Zooplankton(Plankton):
                     for preference, pref_score in self.grazing_preferences.items()
                 ]
             )
-            + settings.saturation_constant_Z_grazing * settings.redfield_ratio_PN
+            + self.grazing_saturation_constant * settings.redfield_ratio_PN
         )
 
-    @veros_routine
     def grazing(self, state, prey):
         """
                 Zooplankton grazing on set preys

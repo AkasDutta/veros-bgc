@@ -50,7 +50,7 @@ growth_efficiency:            0.60             #Range: [0,1]
 grazing_preferences: #Rescaled in `Zooplankton.graxing()`
   detritus: 1
   phytoplankton: 1
-  zooplankon:    1
+  zooplankton:    1
 mortality_rate:               0.00000069444444 #0.06 / 86400
 unit: "mmol/m^3?"
 #max_growth_temperature:

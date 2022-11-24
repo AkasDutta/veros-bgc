@@ -47,7 +47,7 @@ class GlobalFourDegreeBGC(VerosSetup):
         settings.dt_mom = 1800.0
         settings.dt_tracer = 86400.0
         settings.dt_bio = settings.dt_tracer // 4
-        settings.runlen = 0.0
+        settings.runlen = 2 * 360 * 86400.0
 
         settings.x_origin = 4.0
         settings.y_origin = -76.0
@@ -174,13 +174,6 @@ class GlobalFourDegreeBGC(VerosSetup):
         vs.dzt = ddz[::-1]
         vs.dxt = 4.0 * npx.ones_like(vs.dxt)
         vs.dyt = 4.0 * npx.ones_like(vs.dyt)
-
-        # idx_global, _ = distributed.get_chunk_slices(vs, ("xt", "yt", "zt"))  # hm
-
-        # with h5netcdf.File(DATA_FILES["corev2"], "r") as infile:
-        #    vs.swr_initial = infile.variables["SWDN_MOD"][
-        #        idx_global[::-1]
-        #    ].T  # Might move this down
 
     @veros_routine
     def set_coriolis(self, state):
@@ -334,12 +327,13 @@ class GlobalFourDegreeBGC(VerosSetup):
         vs = state.variables
         settings = state.settings
 
-        state.diagnostics["snapshot"].output_frequency = 360 * 86400.0
+        state.diagnostics["snapshot"].output_frequency = 90 * 86400.0
+        state.diagnostics
 
-        state.diagnostics["overturning"].output_frequency = 360 * 86400.0
-        state.diagnostics["overturning"].sampling_frequency
+        state.diagnostics["overturning"].output_frequency = 90 * 86400.0
+        state.diagnostics["overturning"].sampling_frequency = 86400
 
-        state.diagnostics["energy"].output_frequency = 360 * 86400.0
+        state.diagnostics["energy"].output_frequency = 90 * 86400.0
         state.diagnostics["energy"].sampling_frequency = 86400
 
         snapshot_vars = ["bgc_tracers"]
@@ -360,11 +354,11 @@ class GlobalFourDegreeBGC(VerosSetup):
         ]
 
         state.diagnostics["averages"].output_variables = average_vars
-        state.diagnostics["averages"].output_frequency = 360 * 86400.0
+        state.diagnostics["averages"].output_frequency = 90 * 86400.0
         state.diagnostics["averages"].sampling_frequency = 86400
 
-        # state.diagnostics["npzd"].output_frequency = 10 * 86400
-        # state.diagnostics["npzd"].save_graph = False
+        state.diagnostics["npzd"].output_frequency = 10 * 86400
+        state.diagnostics["npzd"].save_graph = False
 
     @veros_routine
     def after_timestep(self, state):
@@ -375,6 +369,15 @@ class GlobalFourDegreeBGC(VerosSetup):
 def set_forcing_kernel(state):
     vs = state.variables
     settings = state.settings
+
+    # shortwave radiation (for photosynthesis)
+    dimensions = state.dimensions
+    dims = ("xt", "yt", "zt")
+    idx_global, _ = distributed.get_chunk_slices(
+        dimensions["xt"], dimensions["yt"], dims
+    )
+    with h5netcdf.File(DATA_FILES["corev2"], "r") as infile:
+        swr_initial = infile.variables["SWDN_MOD"][idx_global[::-1]].T
 
     year_in_seconds = 360 * 86400.0
     (n1, f1), (n2, f2) = veros.tools.get_periodic_interval(
@@ -439,10 +442,11 @@ def set_forcing_kernel(state):
     vs.forc_salt_surface = npx.where(mask, 0.0, vs.forc_salt_surface)
     if settings.enable_npzd:
         # incoming shortwave radiation for plankton production
-        vs.swr[2:-2, 2:-2] = (
-            f1 * vs.swr_initial[:, :, n1] + f2 * vs.swr_initial[:, :, n2]
+        vs.swr = update(
+            vs.swr,
+            at[2:-2, 2:-2],
+            f1 * swr_initial[:, :, n1] + f2 * swr_initial[:, :, n2],
         )
-
     return KernelOutput(
         surface_taux=vs.surface_taux,
         surface_tauy=vs.surface_tauy,
