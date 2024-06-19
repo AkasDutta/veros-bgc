@@ -476,7 +476,10 @@ class Zooplankton(Plankton):
 
     def mortality(self, state):
         """
-        Zooplankton is modelled with a quadratic mortality
+        Zooplankton is modelled with a quadratic mortality.
+        CAVEAT: If multiple species created by subclassing Zooplankton compete
+        for the same resource, might make more sense to have 
+        mortality rate * total zoo * that specific zoo
         """
         return self.mortality_rate * self.temp**2
 
